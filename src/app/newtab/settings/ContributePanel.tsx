@@ -16,6 +16,7 @@ import { browser } from "wxt/browser";
 import { Button } from "@/shared/ui";
 
 import pkg from "../../../../package.json";
+import "./contribute-panel.css";
 
 interface Contributor {
   id: number;
@@ -67,8 +68,43 @@ const FALLBACK_CONTRIBUTORS: Contributor[] = [
   },
 ];
 
-function getLocalReleaseChanges(currentVersion: string): ReleaseItem[] {
+function getLocalReleaseChanges(currentVersion: string, isVi: boolean): ReleaseItem[] {
   const latestTag = currentVersion.startsWith("v") ? currentVersion : `v${currentVersion}`;
+  if (!isVi) {
+    return [
+      {
+        version: latestTag,
+        date: "2026-08-21",
+        isLatest: true,
+        items: [
+          "Spotify: Added recently-played fallback when no music is actively playing & direct open button.",
+          "Spotify: Added responsive layouts (horizontal / vertical / compact).",
+          "Bookmarks Bar: Recursive multi-level nested folders with smooth horizontal slide & Back button.",
+          "Settings: Added Contribute & About section on the very first tab.",
+        ],
+      },
+      {
+        version: "v0.2.0",
+        date: "2026-08-18",
+        items: [
+          "Added MusicBox offline / local audio player with screen corner widget.",
+          "Improved Task Manager with detailed deadlines and DatePicker calendar selector.",
+          "Added wallpaper format filters (static, video, animated) and thumbnail badges.",
+          "Added programming language statistics and top GitHub repositories.",
+          "Support toolbar / panel position swapping and dock overlay mode.",
+        ],
+      },
+      {
+        version: "v0.1.0",
+        date: "2026-08-01",
+        items: [
+          "Initialized NewTab extension with WXT + React + TypeScript architecture.",
+          "Diverse theme system (12 themes), custom typography, and frosted glassmorphism.",
+          "Clock, weather, multi-engine search bar, notes, QR code, Pomodoro timer, and bookmarks bar.",
+        ],
+      },
+    ];
+  }
   return [
     {
       version: latestTag,
@@ -104,14 +140,26 @@ function getLocalReleaseChanges(currentVersion: string): ReleaseItem[] {
   ];
 }
 
+const isBot = (name?: string, type?: string) => {
+  const n = (name || "").toLowerCase();
+  const t = (type || "").toLowerCase();
+  return (
+    t === "bot" ||
+    n.includes("[bot]") ||
+    n.includes("github-actions") ||
+    n.includes("dependabot") ||
+    n.endsWith("-bot")
+  );
+};
+
 export function ContributePanel() {
   const { t, i18n } = useTranslation();
+  const isVi = i18n.language?.startsWith("vi") ?? true;
   const [version, setVersion] = useState(pkg.version ?? "0.3.0");
   const [contributors, setContributors] = useState<Contributor[]>(FALLBACK_CONTRIBUTORS);
   const [commits, setCommits] = useState<CommitItem[]>([]);
-  const [releases, setReleases] = useState<ReleaseItem[]>(() =>
-    getLocalReleaseChanges(pkg.version ?? "0.3.0"),
-  );
+  const [remoteReleases, setRemoteReleases] = useState<ReleaseItem[] | null>(null);
+  const releases = remoteReleases ?? getLocalReleaseChanges(version, isVi);
   const [loadingContributors, setLoadingContributors] = useState(true);
   const [loadingCommits, setLoadingCommits] = useState(true);
   const [viewMode, setViewMode] = useState<"releases" | "commits">("releases");
@@ -121,7 +169,6 @@ export function ContributePanel() {
       const manifest = browser?.runtime?.getManifest?.();
       if (manifest?.version) {
         setVersion(manifest.version);
-        setReleases(getLocalReleaseChanges(manifest.version));
       }
     } catch {
       /* ignore */
@@ -135,9 +182,10 @@ export function ContributePanel() {
       try {
         const res = await fetch(CONTRIBUTORS_API);
         if (res.ok) {
-          const data: Contributor[] = await res.json();
+          const data: (Contributor & { type?: string })[] = await res.json();
           if (!cancelled && Array.isArray(data) && data.length > 0) {
-            setContributors(data);
+            const realUsers = data.filter((c) => !isBot(c.login, c.type));
+            setContributors(realUsers.length > 0 ? realUsers : data);
           }
         }
       } catch {
@@ -151,7 +199,8 @@ export function ContributePanel() {
         if (res.ok) {
           const data: CommitItem[] = await res.json();
           if (!cancelled && Array.isArray(data) && data.length > 0) {
-            setCommits(data);
+            const realCommits = data.filter((c) => !isBot(c.author?.login || c.commit?.author?.name));
+            setCommits(realCommits.length > 0 ? realCommits : data);
           }
         }
       } catch {
@@ -163,9 +212,9 @@ export function ContributePanel() {
       try {
         const res = await fetch(RELEASES_API);
         if (res.ok) {
-          const data = await res.json();
+          const data: { tag_name?: string; name?: string; published_at?: string; body?: string }[] = await res.json();
           if (!cancelled && Array.isArray(data) && data.length > 0) {
-            const mapped: ReleaseItem[] = data.map((r: any, idx: number) => {
+            const mapped: ReleaseItem[] = data.map((r, idx) => {
               const bodyLines = (r.body || "")
                 .split("\n")
                 .map((l: string) => l.trim().replace(/^[-*•]\s*/, ""))
@@ -174,10 +223,10 @@ export function ContributePanel() {
                 version: r.tag_name || r.name || "Release",
                 date: r.published_at ? r.published_at.split("T")[0] : "",
                 isLatest: idx === 0,
-                items: bodyLines.length > 0 ? bodyLines : [r.name || "Cập nhật mới"],
+                items: bodyLines.length > 0 ? bodyLines : [r.name || t("settings.newUpdate", "Cập nhật mới")],
               };
             });
-            setReleases(mapped);
+            setRemoteReleases(mapped);
           }
         }
       } catch {
@@ -341,9 +390,9 @@ export function ContributePanel() {
                   <div className="contribute-timeline__header">
                     <span className="contribute-timeline__version">{rel.version}</span>
                     {rel.isLatest && (
-                      <span className="contribute-timeline__badge">Latest</span>
+                      <span className="contribute-timeline__badge">{t("settings.latest", "Mới nhất")}</span>
                     )}
-                    <span className="contribute-timeline__date">{rel.date}</span>
+                    <span className="contribute-timeline__date">{formatDate(rel.date)}</span>
                   </div>
                   <ul className="contribute-timeline__list">
                     {rel.items.map((it, idx) => (
@@ -359,7 +408,7 @@ export function ContributePanel() {
         ) : loadingCommits ? (
           <p className="ui-field__desc">{t("settings.loadingChanges")}</p>
         ) : commits.length === 0 ? (
-          <p className="ui-field__desc">No recent commits found.</p>
+          <p className="ui-field__desc">{t("settings.noCommits", "No recent commits found.")}</p>
         ) : (
           <div className="contribute-commits">
             {commits.map((c) => (

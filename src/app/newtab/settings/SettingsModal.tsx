@@ -137,13 +137,13 @@ function FeaturePanel({ featureId }: { featureId: string }) {
 export function SettingsModal() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<string>(CONTRIBUTE_ID);
+  const [category, setCategory] = useState<string>(CORE_FEATURE_ID);
   const features = getFeatures();
 
   useEffect(
     () =>
       on("settings:open", (payload) => {
-        setCategory(payload?.featureId ?? CONTRIBUTE_ID);
+        setCategory(payload?.featureId ?? CORE_FEATURE_ID);
         setOpen(true);
       }),
     [],
@@ -168,13 +168,6 @@ export function SettingsModal() {
           <nav className="settings-nav">
             {/* System group */}
             <div className="settings-nav__group">{t("settings.groupSystem")}</div>
-            <button
-              className={`settings-nav__item ${category === CONTRIBUTE_ID ? "settings-nav__item--active" : ""}`}
-              onClick={() => setCategory(CONTRIBUTE_ID)}
-            >
-              <HeartHandshake size={16} />
-              {t("settings.contribute")}
-            </button>
             <button
               className={`settings-nav__item ${category === CORE_FEATURE_ID ? "settings-nav__item--active" : ""}`}
               onClick={() => setCategory(CORE_FEATURE_ID)}
@@ -219,6 +212,16 @@ export function SettingsModal() {
                 </div>
               );
             })}
+
+            {/* About & Contribute at the bottom */}
+            <div className="settings-nav__group">{t("settings.groupAbout", "Thông tin")}</div>
+            <button
+              className={`settings-nav__item ${category === CONTRIBUTE_ID ? "settings-nav__item--active" : ""}`}
+              onClick={() => setCategory(CONTRIBUTE_ID)}
+            >
+              <HeartHandshake size={16} />
+              {t("settings.contribute")}
+            </button>
           </nav>
           <div className="settings-content">
             {category === CONTRIBUTE_ID ? (

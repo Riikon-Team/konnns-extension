@@ -46,12 +46,17 @@ export function Dropdown({
     if (!anchor) return;
     const update = () => {
       const r = anchor.getBoundingClientRect();
+      const menuW = width ?? (matchTriggerWidth ? r.width : (menuRef.current?.offsetWidth ?? r.width));
       const menuH = menuRef.current?.offsetHeight ?? 0;
       const spaceBelow = window.innerHeight - r.bottom;
       const openUp = spaceBelow < menuH + 12 && r.top > spaceBelow;
+      // clamp so a menu anchored near the right/left edge (e.g. a toolbar
+      // button flush against the window edge) never renders partly off-screen
+      const margin = 8;
+      const left = Math.min(r.left, window.innerWidth - menuW - margin);
       setStyle({
         position: "fixed",
-        left: r.left,
+        left: Math.max(margin, left),
         top: openUp ? undefined : r.bottom + 4,
         bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
         width: width ?? (matchTriggerWidth ? r.width : undefined),

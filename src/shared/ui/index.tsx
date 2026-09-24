@@ -13,20 +13,15 @@ import "./ui.css";
 /* ---------- Button ---------- */
 type ButtonVariant = "primary" | "subtle" | "ghost" | "danger";
 
-export function Button({
-  variant = "subtle",
-  size,
-  className = "",
-  ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
-  size?: "sm";
-}) {
+export const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "sm" }
+>(function Button({ variant = "subtle", size, className = "", ...rest }, ref) {
   const cls = ["ui-btn", `ui-btn--${variant}`, size === "sm" && "ui-btn--sm", className]
     .filter(Boolean)
     .join(" ");
-  return <button type="button" className={cls} {...rest} />;
-}
+  return <button ref={ref} type="button" className={cls} {...rest} />;
+});
 
 /* ---------- ReloadButton (force refresh, bypasses cache) ---------- */
 export function ReloadButton({
@@ -230,8 +225,8 @@ export function Field({
   inline = false,
   children,
 }: {
-  label: string;
-  description?: string;
+  label: React.ReactNode;
+  description?: React.ReactNode;
   error?: string;
   inline?: boolean;
   children: React.ReactNode;
