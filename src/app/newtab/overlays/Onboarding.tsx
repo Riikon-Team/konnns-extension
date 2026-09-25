@@ -17,7 +17,7 @@ import { SEARCH_FEATURE_ID } from "@/features/newtab/search-bar";
 import { hasSuggestPermission, requestSuggestPermission } from "@/features/newtab/search-bar/suggest";
 import { BOOKMARK_FEATURE_ID } from "@/features/newtab/bookmark-bar";
 import { requestBookmarkPermission } from "@/features/newtab/bookmark-bar/bookmarks-api";
-import { CLOCK_FEATURE_ID } from "@/features/newtab/clock-weather";
+import { WEATHER_FEATURE_ID } from "@/features/newtab/weather";
 import { Button, Card, Segmented, Slider, TextInput, Toggle } from "@/shared/ui";
 import { ThemePicker } from "../settings/ThemePicker";
 import "./onboarding.css";
@@ -142,7 +142,8 @@ function StepContent({ step }: { step: number }) {
   const setValue = useSettingsStore((s) => s.setValue);
   const setEnabled = useSettingsStore((s) => s.setEnabled);
   const coreValues = useFeatureValues(CORE_FEATURE_ID);
-  const clockValues = useFeatureValues(CLOCK_FEATURE_ID);
+  const weatherValues = useFeatureValues(WEATHER_FEATURE_ID);
+  const weatherEnabled = useSettingsStore((s) => s.enabled[WEATHER_FEATURE_ID] ?? true);
   const bookmarkEnabled = useSettingsStore((s) => s.enabled[BOOKMARK_FEATURE_ID] ?? true);
 
   switch (step) {
@@ -200,18 +201,34 @@ function StepContent({ step }: { step: number }) {
         <>
           <h2 className="onboarding-step__title">{t("onboarding.stepWeather")}</h2>
           <p className="onboarding-step__desc">{t("onboarding.stepWeatherDesc")}</p>
-          <TextInput
-            placeholder={t("weather.locationPlaceholder")}
-            value={(clockValues.location as string) ?? ""}
-            onChange={(e) => setValue(CLOCK_FEATURE_ID, "location", e.target.value)}
+          <Segmented
+            value={weatherEnabled ? ((weatherValues.display as string) ?? "below") : "off"}
+            onChange={(v) => {
+              setEnabled(WEATHER_FEATURE_ID, v !== "off");
+              if (v !== "off") setValue(WEATHER_FEATURE_ID, "display", v);
+            }}
+            options={[
+              { value: "below", label: t("weather.displayBelow") },
+              { value: "bubble", label: t("weather.displayBubble") },
+              { value: "off", label: t("weather.displayOff") },
+            ]}
           />
-          <div className="ui-field__row">
-            <span className="ui-field__label">{t("weather.useGeolocation")}</span>
-            <Toggle
-              checked={clockValues.useGeolocation === true}
-              onChange={(v) => setValue(CLOCK_FEATURE_ID, "useGeolocation", v)}
-            />
-          </div>
+          {weatherEnabled && (
+            <>
+              <TextInput
+                placeholder={t("weather.locationPlaceholder")}
+                value={(weatherValues.location as string) ?? ""}
+                onChange={(e) => setValue(WEATHER_FEATURE_ID, "location", e.target.value)}
+              />
+              <div className="ui-field__row">
+                <span className="ui-field__label">{t("weather.useGeolocation")}</span>
+                <Toggle
+                  checked={weatherValues.useGeolocation === true}
+                  onChange={(v) => setValue(WEATHER_FEATURE_ID, "useGeolocation", v)}
+                />
+              </div>
+            </>
+          )}
         </>
       );
     case 5:

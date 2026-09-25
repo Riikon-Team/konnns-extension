@@ -11,6 +11,7 @@ registerSiteApp({
   category: "media",
   fullBleed: true,
   order: 10,
+  dataTables: ["audioProjects", "audioSources"],
   // lazy so wavesurfer and the export pipeline never load with the site home
   component: lazy(() => import("./AudioEditor")),
 });

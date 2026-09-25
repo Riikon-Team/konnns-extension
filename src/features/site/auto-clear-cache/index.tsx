@@ -10,5 +10,6 @@ registerSiteApp({
   icon: Eraser,
   category: "other",
   order: 33,
+  dataTables: ["autoClearSettings", "clearLog"],
   component: lazy(() => import("./AutoClearCache")),
 });

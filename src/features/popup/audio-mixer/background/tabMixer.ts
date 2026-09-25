@@ -45,10 +45,22 @@ function offscreenApi(): OffscreenApi | undefined {
   return (globalThis as { chrome?: { offscreen?: OffscreenApi } }).chrome?.offscreen;
 }
 
-/** Firefox has no offscreen documents at all, so the whole advanced tier is Chromium-only and the UI has to be able to ask. */
+/**
+ * Firefox has no offscreen documents / tabCapture, so the advanced tier is
+ * Chromium-only and the UI has to be able to ask.
+ *
+ * Must NOT test `chrome.offscreen` / `chrome.tabCapture` themselves: both are
+ * OPTIONAL permissions, and Chrome only creates those namespaces once they are
+ * granted. Testing them hid the very button that requests the grant — and made
+ * the Alt+Shift+V shortcut bail out silently — so nothing could ever start.
+ * The Chromium build is MV3 and the Firefox build MV2, which is the real split.
+ */
 export function supportsTabVolume(): boolean {
-  const chromeApi = globalThis as { chrome?: { offscreen?: unknown; tabCapture?: unknown } };
-  return Boolean(chromeApi.chrome?.offscreen && chromeApi.chrome?.tabCapture);
+  try {
+    return browser.runtime.getManifest().manifest_version === 3;
+  } catch {
+    return false;
+  }
 }
 
 let creating: Promise<void> | null = null;
@@ -103,6 +115,23 @@ export async function captureTab(tabId: number, streamId: string, gain: number):
   const reply = await sendToOffscreen({ type: "tabMixer:capture", tabId, streamId, gain });
   if (!reply?.ok) throw new Error(reply?.error ?? "audioMixer.errCaptureFailed");
   await writeGains({ ...(await readGains()), [tabId]: gain });
+  setCaptureBadge(tabId, true);
+}
+
+/**
+ * "♪" on the toolbar icon for a captured tab — the one visible hint (next to
+ * Chrome's own "sharing" dot) that this tab now feeds volume + music effects.
+ */
+function setCaptureBadge(tabId: number, on: boolean): void {
+  const action = (browser as unknown as {
+    action?: {
+      setBadgeText: (d: { tabId: number; text: string }) => Promise<void>;
+      setBadgeBackgroundColor?: (d: { tabId: number; color: string }) => Promise<void>;
+    };
+  }).action;
+  if (!action) return;
+  void action.setBadgeText({ tabId, text: on ? "♪" : "" }).catch(() => {});
+  if (on) void action.setBadgeBackgroundColor?.({ tabId, color: "#0ea5e9" }).catch(() => {});
 }
 
 export async function setTabGain(tabId: number, gain: number): Promise<void> {
@@ -119,7 +148,99 @@ export async function releaseTab(tabId: number): Promise<void> {
   if (await hasOffscreen()) await sendToOffscreen({ type: "tabMixer:stop", tabId });
   delete gains[tabId];
   await writeGains(gains);
+  setCaptureBadge(tabId, false);
   await closeOffscreenIfIdle(gains);
+}
+
+/* ------------------------------------------------- keyboard shortcut toggle */
+
+export const CAPTURE_COMMAND = "capture-tab-audio";
+
+type ChromeCapture = {
+  runtime?: { lastError?: { message?: string } };
+  tabCapture?: { getMediaStreamId?: (o: { targetTabId: number }, cb: (id?: string) => void) => void };
+};
+
+/**
+ * `chrome.tabCapture.getMediaStreamId` — callback-only, callable from the
+ * worker since Chrome 116 (the pattern Chrome documents for offscreen
+ * consumers). Rejects with the browser's own reason, never a bare null.
+ */
+function mintStreamId(targetTabId: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chromeApi = (globalThis as { chrome?: ChromeCapture }).chrome;
+    const api = chromeApi?.tabCapture;
+    if (!api?.getMediaStreamId) return reject(new Error("tabCapture API unavailable (permission not active yet?)"));
+    try {
+      api.getMediaStreamId({ targetTabId }, (id) => {
+        const err = chromeApi?.runtime?.lastError?.message;
+        if (err || !id) reject(new Error(err ?? "getMediaStreamId returned no id"));
+        else resolve(id);
+      });
+    } catch (e) {
+      reject(e instanceof Error ? e : new Error(String(e)));
+    }
+  });
+}
+
+/**
+ * Popup "volume" button → capture the tab it was opened on. The popup opening
+ * granted activeTab for that tab, which the worker can use to mint the id.
+ */
+export async function startTabCapture(tabId: number, gain: number): Promise<void> {
+  try {
+    const streamId = await mintStreamId(tabId);
+    await captureTab(tabId, streamId, gain);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await recordCaptureError(tabId, reason);
+    throw new Error(reason);
+  }
+}
+
+/**
+ * Alt+Shift+V on a playing tab: capture it (music effects on the New Tab +
+ * volume control), or release it if already captured. A keyboard command
+ * grants activeTab for the current tab — exactly what getMediaStreamId needs,
+ * so no popup is required. Without the (optional) permissions yet, open the
+ * popup instead: permissions can only be granted from a page click.
+ */
+async function toggleCaptureFromCommand(tabId: number | undefined): Promise<void> {
+  if (tabId === undefined) return;
+  if (!supportsTabVolume()) return recordCaptureError(tabId, "unsupported");
+  if ((await readGains())[tabId] !== undefined) {
+    await releaseTab(tabId);
+    return;
+  }
+  const granted = await browser.permissions
+    .contains({ permissions: ["tabCapture", "offscreen"] } as Parameters<typeof browser.permissions.contains>[0])
+    .catch(() => false);
+  if (!granted) {
+    await recordCaptureError(tabId, "no-permission");
+    const action = (browser as unknown as { action?: { openPopup?: () => Promise<void> } }).action;
+    await action?.openPopup?.().catch(() => {});
+    return;
+  }
+  await startTabCapture(tabId, 1).catch(() => {}); // reason already recorded
+}
+
+/* ---------------------------------------------------- failure breadcrumbs */
+
+/**
+ * A capture that fails from the keyboard shortcut has no UI to report to, so
+ * leave a trace: a red "!" on the icon for that tab (replaced by "♪" on the
+ * next successful capture) and the reason in the worker console.
+ */
+async function recordCaptureError(tabId: number, reason: string): Promise<void> {
+  console.warn("[tabMixer] capture failed:", reason);
+  const action = (browser as unknown as {
+    action?: {
+      setBadgeText: (d: { tabId: number; text: string }) => Promise<void>;
+      setBadgeBackgroundColor?: (d: { tabId: number; color: string }) => Promise<void>;
+    };
+  }).action;
+  void action?.setBadgeText({ tabId, text: "!" }).catch(() => {});
+  void action?.setBadgeBackgroundColor?.({ tabId, color: "#ef4444" }).catch(() => {});
 }
 
 export async function listTabGains(): Promise<GainMap> {
@@ -143,14 +264,21 @@ async function closeOffscreenIfIdle(gains: GainMap): Promise<void> {
 
 /**
  * Registered unconditionally from background.ts, same as every other tool in
- * this project. Without these, a captured tab that gets closed or navigated
- * away leaves the browser's "this tab is being shared" indicator stuck on
- * and its audio nodes alive (docs/roadmap/05 §5).
+ * this project. Without the onRemoved cleanup, a closed captured tab leaves
+ * its audio nodes alive and the offscreen document open (docs/roadmap/05 §5).
+ *
+ * Deliberately NOT released on URL change any more: Chrome keeps a tab
+ * capture across navigations within the tab, and single-page players change
+ * the URL on every track (YouTube autoplay → pushState) — releasing there cut
+ * the music visualizer (and the volume setting) off after each song.
  */
 export function initTabMixer(): void {
-  browser.tabs.onRemoved.addListener((tabId) => void releaseTab(tabId));
-  browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    // a navigation replaces the page the capture was granted for
-    if (changeInfo.url !== undefined) void releaseTab(tabId);
+  browser.commands?.onCommand.addListener((command, tab) => {
+    if (command !== CAPTURE_COMMAND) return;
+    if (tab?.id !== undefined) return void toggleCaptureFromCommand(tab.id);
+    void browser.tabs
+      .query({ active: true, currentWindow: true })
+      .then(([active]) => toggleCaptureFromCommand(active?.id));
   });
+  browser.tabs.onRemoved.addListener((tabId) => void releaseTab(tabId));
 }

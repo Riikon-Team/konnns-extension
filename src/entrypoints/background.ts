@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import { db } from "@/core/storage/db";
 import { siteUrl, type RuntimeMessage } from "@/core/messaging";
 import { fetchUnreadCount } from "@/features/newtab/panel-github/api";
+import { githubConnection } from "@/features/newtab/panel-github/connection";
 import { ALARM_NAME as POMODORO_ALARM, advanceOnFire } from "@/features/newtab/tool-pomodoro/state";
 import {
   FLUSH_ALARM as TRACKER_FLUSH_ALARM,
@@ -24,6 +25,7 @@ import {
   listTabGains,
   releaseTab,
   setTabGain,
+  startTabCapture,
 } from "@/features/popup/audio-mixer/background/tabMixer";
 
 /**
@@ -61,6 +63,12 @@ export default defineBackground(() => {
       }
       case "tabMixer:capture": {
         void captureTab(msg.tabId, msg.streamId, msg.gain)
+          .then(() => sendResponse({ ok: true }))
+          .catch((err: unknown) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+        return true;
+      }
+      case "tabMixer:start": {
+        void startTabCapture(msg.tabId, msg.gain)
           .then(() => sendResponse({ ok: true }))
           .catch((err: unknown) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
         return true;
@@ -194,7 +202,10 @@ async function pollGitHub(): Promise<void> {
       browser.permissions.contains({ permissions: ["notifications"] }),
     ]);
 
-    const token = (ghSettings?.values?.token as string | undefined)?.trim();
+    // notifications need a token — and only count in token mode (username mode
+    // may still hold an old token the user switched away from)
+    const conn = githubConnection(ghSettings?.values ?? {});
+    const token = conn.mode === "token" ? conn.token : "";
     if (!token || !ghSettings?.enabled) return;
 
     // respect per-source + master notification toggles

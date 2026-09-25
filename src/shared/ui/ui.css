@@ -758,6 +758,59 @@ html[data-low-power="true"] .ui-datepicker {
   flex: 1;
 }
 
+.ui-modal__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ---- "look through" (held eye button): everything but that button fades ---- */
+.ui-modal-overlay,
+.ui-modal,
+.ui-modal__body,
+.ui-modal__title,
+.ui-modal__header {
+  transition:
+    background-color 160ms ease-out,
+    backdrop-filter 160ms ease-out,
+    border-color 160ms ease-out,
+    box-shadow 160ms ease-out,
+    opacity 160ms ease-out;
+}
+
+.ui-modal-overlay--peek {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.ui-modal--peek {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ui-modal--peek .ui-modal__body,
+.ui-modal--peek .ui-modal__title,
+.ui-modal--peek .ui-modal__actions > .ui-iconbtn:not(.ui-modal__peek) {
+  opacity: 0;
+}
+
+.ui-modal--peek .ui-modal__header {
+  border-color: transparent;
+}
+
+/* the one thing left on screen — make it findable over any wallpaper */
+.ui-modal__peek--on {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-elevated);
+}
+
+.ui-modal__peek--on:hover {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
 /* ---------- Skeleton ---------- */
 .ui-skeleton {
   border-radius: var(--radius-sm);
@@ -810,6 +863,99 @@ html[data-low-power="true"] .ui-skeleton {
 .ui-segmented__item--active {
   background: var(--accent);
   color: var(--accent-contrast);
+}
+
+/* ---------- Collapsible section ---------- */
+.ui-coll {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-coll__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ui-coll__toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 2px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ui-coll__toggle:hover {
+  color: var(--text);
+}
+
+.ui-coll__icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.ui-coll__title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ui-coll__count {
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.ui-coll__hint {
+  overflow: hidden;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.ui-coll__chev {
+  flex: none;
+  margin-left: auto;
+  transform: rotate(-90deg);
+  transition: transform var(--dur-hover) ease-out;
+}
+
+.ui-coll--open .ui-coll__chev {
+  transform: rotate(0deg);
+}
+
+/* height animation without measuring: 0fr ↔ 1fr grid row */
+.ui-coll__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-panel) var(--ease-out, ease-out);
+}
+
+.ui-coll--open .ui-coll__body {
+  grid-template-rows: 1fr;
+}
+
+.ui-coll__inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ui-coll--open .ui-coll__inner {
+  padding-top: var(--space-2);
 }
 
 /* ---------- Check chips (multiselect settings field) ---------- */

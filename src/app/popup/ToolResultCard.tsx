@@ -6,10 +6,6 @@ import { putHandoff } from "@/core/handoff";
 import { isMarkdownPayload, estimateTokens } from "@/shared/utils/markdownResult";
 import { Button } from "@/shared/ui";
 
-/**
- * Shows what an embedded tool produced. Any tool whose payload carries a
- * `markdown` string renders here, so future extraction tools reuse it as-is.
- */
 export function ToolResultCard({
   result,
   onBack,
@@ -104,7 +100,6 @@ function ResultHeader({ title, onBack }: { title: string; onBack: () => void }) 
   );
 }
 
-/** Characters no filesystem (or the Downloads API) will accept in a file name. */
 const RESERVED_CHARS = new Set(["<", ">", ":", '"', "|", "?", "*", "/", "\\"]);
 
 function safeFileName(title: string): string {

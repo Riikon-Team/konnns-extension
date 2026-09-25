@@ -1,3 +1,97 @@
+/* ---------- settings: connection block (GitHubAccount) ---------- */
+.gh-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.gh-account__input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.gh-account__input > svg {
+  position: absolute;
+  left: 11px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.gh-account__input .ui-input {
+  padding-left: 34px;
+}
+.gh-account__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+.gh-account__link:hover {
+  text-decoration: underline;
+}
+.gh-account__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.gh-account__ok,
+.gh-account__err {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.gh-account__ok {
+  color: #22c55e;
+}
+.gh-account__ok img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+.gh-account__err {
+  color: var(--danger, #ef4444);
+}
+.gh-account__note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.gh-account__spin {
+  animation: gh-spin 0.9s linear infinite;
+}
+@keyframes gh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* panel: username mode without github.com access yet */
+.gh__calendar-cta {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.gh__calendar-cta:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .gh__reload {
   display: flex;
   justify-content: flex-end;

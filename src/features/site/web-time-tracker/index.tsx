@@ -10,6 +10,7 @@ registerSiteApp({
   icon: Clock,
   category: "other",
   order: 20,
+  dataTables: ["activitySessions", "dailyTotals", "trackerSettings"],
   // lazy so this stays out of the site home bundle for anyone who never opens it
   component: lazy(() => import("./TimeTrackerDashboard")),
 });

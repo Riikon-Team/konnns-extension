@@ -23,14 +23,6 @@ export const coreGeneralSchema = defineSchema({
     description: "settings.lowPowerDesc",
     default: false,
   },
-  // off by default: stealing focus from the address bar costs one extra page
-  // load and leaves the extension URL showing (features/newtab/search-bar/focus.ts)
-  searchAutofocus: {
-    type: "toggle",
-    label: "settings.searchAutofocus",
-    description: "settings.searchAutofocusDesc",
-    default: false,
-  },
   sidebarMode: {
     type: "select",
     label: "settings.sidebarMode",
@@ -124,23 +116,6 @@ export const coreAppearanceSchema = defineSchema({
     ],
     default: "system",
   },
-  bgDim: {
-    type: "slider",
-    label: "settings.bgDim",
-    description: "settings.bgDimDesc",
-    min: 0,
-    max: 80,
-    step: 5,
-    default: 35,
-  },
-  bgBlur: {
-    type: "slider",
-    label: "settings.bgBlur",
-    min: 0,
-    max: 24,
-    step: 1,
-    default: 0,
-  },
   panelAlpha: {
     type: "slider",
     label: "settings.panelAlpha",
@@ -158,12 +133,6 @@ export const coreAppearanceSchema = defineSchema({
     max: 30,
     step: 1,
     default: 16,
-  },
-  parallax: {
-    type: "toggle",
-    label: "settings.parallax",
-    description: "settings.parallaxDesc",
-    default: false,
   },
   cursorEffect: {
     type: "select",

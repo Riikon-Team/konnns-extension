@@ -42,6 +42,8 @@ export type RuntimeMessage =
    * to live in an offscreen document, since an MV3 service worker has no DOM.
    */
   | { type: "tabMixer:capture"; tabId: number; streamId: string; gain: number }
+  /** mint the stream id in the worker (Chrome's recommended place) and capture */
+  | { type: "tabMixer:start"; tabId: number; gain: number }
   /** popup → background → offscreen: change the gain of an already-captured tab */
   | { type: "tabMixer:setGain"; tabId: number; gain: number }
   /** popup → background → offscreen: release a tab, restoring its own audio output */

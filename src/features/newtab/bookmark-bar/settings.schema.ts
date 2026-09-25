@@ -21,4 +21,11 @@ export const bookmarkSettingsSchema = defineSchema({
     ],
     default: "always",
   },
+  hoverScroll: {
+    type: "toggle",
+    label: "bookmarks.hoverScroll",
+    description: "bookmarks.hoverScrollDesc",
+    default: true,
+    showIf: (v) => v.orientation !== "radial",
+  },
 });

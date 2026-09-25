@@ -1,26 +1,13 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, X } from "lucide-react";
-import { getVisibleSiteApps, type SiteAppCategory } from "@/core/site-registry";
-
-/**
- * Home of the Custom Site — the page the popup's big button lands on.
- * Pure projection of the Site App Registry, grouped by category.
- */
-
-const CATEGORY_ORDER: SiteAppCategory[] = ["media", "text", "dev", "other"];
+import { getVisibleSiteApps, groupSiteApps } from "@/core/site-registry";
 
 export function HomePage() {
   const { t } = useTranslation();
   const all = useMemo(() => getVisibleSiteApps(), []);
   const [query, setQuery] = useState("");
 
-  /**
-   * Matches the NAME and the DESCRIPTION, both translated, so searching works
-   * in whichever language the labels are showing rather than against the
-   * internal ids. Accents are folded, because typing "am thanh" should still
-   * find "Sửa âm thanh".
-   */
   const apps = useMemo(() => {
     const needle = fold(query);
     if (!needle) return all;
@@ -29,16 +16,7 @@ export function HomePage() {
     );
   }, [all, query, t]);
 
-  const groups = useMemo(() => {
-    const byCategory = new Map<SiteAppCategory, typeof apps>();
-    for (const app of apps) {
-      const key = app.category ?? "other";
-      byCategory.set(key, [...(byCategory.get(key) ?? []), app]);
-    }
-    return CATEGORY_ORDER.filter((c) => byCategory.has(c)).map(
-      (c) => [c, byCategory.get(c)!] as const,
-    );
-  }, [apps]);
+  const groups = useMemo(() => groupSiteApps(apps), [apps]);
 
   return (
     <div className="home">
@@ -91,7 +69,6 @@ export function HomePage() {
   );
 }
 
-/** Lower-case and strip accents, so "am thanh" matches "âm thanh". */
 function fold(text: string): string {
   return text
     .toLowerCase()

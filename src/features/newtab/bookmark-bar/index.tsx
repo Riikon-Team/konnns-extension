@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bookmark, ChevronLeft, ChevronRight, Folder } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Folder } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -240,50 +240,119 @@ function BookmarkBar() {
     })();
   }, [load]);
 
-  // macOS-dock magnification
-  const onMouseMove = (e: React.MouseEvent) => {
-    const bar = barRef.current;
-    if (!bar) return;
-    const nodes = bar.querySelectorAll<HTMLElement>(".bookmark-item");
+  const vertical = orientation === "vertical";
+  const hoverScroll = values.hoverScroll !== false;
 
-    // Radial: find the single closest item and magnify only that one
-    if (orientation === "radial") {
-      let best: { el: HTMLElement; dist: number } | null = null;
-      nodes.forEach((node) => {
-        const r = node.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
-        if (!best || dist < best.dist) best = { el: node, dist };
-      });
-      nodes.forEach((node) => {
-        node.style.setProperty("--bm-scale", node === best?.el ? "1.4" : "1");
-      });
-      return;
-    }
+  // macOS-dock magnification (kept as a function: the hover-scroll loop re-runs
+  // it every frame, since items slide under a still pointer while scrolling)
+  const applyMagnify = useCallback(
+    (clientX: number, clientY: number) => {
+      const bar = barRef.current;
+      if (!bar) return;
+      const nodes = bar.querySelectorAll<HTMLElement>(".bookmark-item");
 
-    // Horizontal / vertical: proximity-based scaling along the bar axis
-    nodes.forEach((node) => {
-      const rect = node.getBoundingClientRect();
-      const center = orientation === "vertical" ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
-      const pos = orientation === "vertical" ? e.clientY : e.clientX;
-      const dist = Math.abs(pos - center);
-      const scale = Math.max(1, 1.35 - dist / 140);
-      node.style.setProperty("--bm-scale", scale.toFixed(3));
-    });
-  };
-  const onMouseLeave = () => {
-    barRef.current
-      ?.querySelectorAll<HTMLElement>(".bookmark-item")
-      .forEach((n) => n.style.removeProperty("--bm-scale"));
-  };
+      // Radial: find the single closest item and magnify only that one
+      if (orientation === "radial") {
+        let best: { el: HTMLElement; dist: number } | null = null;
+        nodes.forEach((node) => {
+          const r = node.getBoundingClientRect();
+          const dist = Math.hypot(clientX - (r.left + r.width / 2), clientY - (r.top + r.height / 2));
+          if (!best || dist < best.dist) best = { el: node, dist };
+        });
+        nodes.forEach((node) => {
+          node.style.setProperty("--bm-scale", node === best?.el ? "1.4" : "1");
+        });
+        return;
+      }
+
+      // Horizontal / vertical: proximity-based scaling along the bar axis
+      nodes.forEach((node) => {
+        const rect = node.getBoundingClientRect();
+        const center = vertical ? rect.top + rect.height / 2 : rect.left + rect.width / 2;
+        const pos = vertical ? clientY : clientX;
+        const scale = Math.max(1, 1.35 - Math.abs(pos - center) / 140);
+        node.style.setProperty("--bm-scale", scale.toFixed(3));
+      });
+    },
+    [orientation, vertical],
+  );
+
+  /* ---------------- hover-to-scroll ---------------- */
+  // px/s at the very edge (and while hovering an arrow)
+  const MAX_SPEED = 720;
+  // edge band (px) inside the track where hovering scrolls
+  const EDGE = 72;
+  const pointer = useRef<{ x: number; y: number } | null>(null);
+  /** -1..1: set by hovering an arrow button (overrides the edge bands) */
+  const arrowPush = useRef(0);
+  const raf = useRef(0);
 
   const updateScrollState = useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 1);
-    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1);
+    const pos = vertical ? el.scrollTop : el.scrollLeft;
+    const max = vertical ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
+    setCanScrollLeft(pos > 1);
+    setCanScrollRight(pos < max - 1);
+  }, [vertical]);
+
+  /** Scroll velocity (px/s) from the pointer: stronger the closer to an edge. */
+  const velocity = useCallback((): number => {
+    if (arrowPush.current) return arrowPush.current * MAX_SPEED;
+    const el = trackRef.current;
+    const p = pointer.current;
+    if (!el || !p || !hoverScroll) return 0;
+    const r = el.getBoundingClientRect();
+    const pos = vertical ? p.y - r.top : p.x - r.left;
+    const size = vertical ? r.height : r.width;
+    if (pos < 0 || pos > size) return 0;
+    const band = Math.min(EDGE, size / 4);
+    if (pos < band) return -MAX_SPEED * (1 - pos / band) ** 2;
+    if (pos > size - band) return MAX_SPEED * (1 - (size - pos) / band) ** 2;
+    return 0;
+  }, [hoverScroll, vertical]);
+
+  /** One rAF loop while the pointer is over the bar; idles cheaply mid-track. */
+  const startLoop = useCallback(() => {
+    if (raf.current) return;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const el = trackRef.current;
+      const v = velocity();
+      if (el && v !== 0) {
+        if (vertical) el.scrollTop += v * dt;
+        else el.scrollLeft += v * dt;
+        updateScrollState();
+        const p = pointer.current;
+        if (p) applyMagnify(p.x, p.y); // items moved under the pointer
+      }
+      raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+  }, [velocity, vertical, updateScrollState, applyMagnify]);
+
+  const stopLoop = useCallback(() => {
+    cancelAnimationFrame(raf.current);
+    raf.current = 0;
   }, []);
+
+  useEffect(() => stopLoop, [stopLoop]);
+
+  const onMouseMove = (e: React.MouseEvent) => {
+    pointer.current = { x: e.clientX, y: e.clientY };
+    applyMagnify(e.clientX, e.clientY);
+    if (orientation !== "radial") startLoop();
+  };
+  const onMouseLeave = () => {
+    pointer.current = null;
+    arrowPush.current = 0;
+    stopLoop();
+    barRef.current
+      ?.querySelectorAll<HTMLElement>(".bookmark-item")
+      .forEach((n) => n.style.removeProperty("--bm-scale"));
+  };
 
   useEffect(() => {
     updateScrollState();
@@ -292,11 +361,36 @@ function BookmarkBar() {
     return () => window.removeEventListener("resize", onResize);
   }, [items, updateScrollState]);
 
+  // wheel over the bar scrolls ALONG it (a plain vertical wheel moves a
+  // horizontal bar). Non-passive so the page itself doesn't also react.
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const max = vertical ? el.scrollHeight - el.clientHeight : el.scrollWidth - el.clientWidth;
+      if (max <= 0 || delta === 0) return;
+      e.preventDefault();
+      if (vertical) el.scrollTop += delta;
+      else el.scrollLeft += delta;
+      updateScrollState();
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // seenNote/state: the track only mounts once loaded and the first-run note is dismissed
+  }, [items, vertical, updateScrollState, seenNote, state]);
+
   const scrollTrack = (direction: "left" | "right") => {
     const el = trackRef.current;
     if (!el) return;
-    const step = 200; // px per click
-    el.scrollBy({ left: direction === "right" ? step : -step, behavior: "smooth" });
+    const step = direction === "right" ? 200 : -200; // px per click
+    el.scrollBy(vertical ? { top: step, behavior: "smooth" } : { left: step, behavior: "smooth" });
+  };
+
+  /** hovering an arrow keeps scrolling that way (clicking still steps) */
+  const arrowHover = (dir: -1 | 0 | 1) => () => {
+    arrowPush.current = hoverScroll ? dir : 0;
+    if (dir !== 0) startLoop();
   };
 
   const isTop = orientation === "horizontal-top";
@@ -428,13 +522,21 @@ function BookmarkBar() {
           <button
             className={`bookmark-bar__scroll-btn ${canScrollLeft ? "bookmark-bar__scroll-btn--visible" : ""}`}
             onClick={() => scrollTrack("left")}
-            aria-label="Scroll bookmarks left"
+            onMouseEnter={arrowHover(-1)}
+            onMouseLeave={arrowHover(0)}
+            aria-label={t("bookmarks.scrollBack")}
             tabIndex={canScrollLeft ? 0 : -1}
           >
-            <ChevronLeft size={18} />
+            {vertical ? <ChevronUp size={18} /> : <ChevronLeft size={18} />}
           </button>
           <div
-            className="bookmark-bar__track"
+            className={[
+              "bookmark-bar__track",
+              canScrollLeft && "bookmark-bar__track--fade-start",
+              canScrollRight && "bookmark-bar__track--fade-end",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             ref={trackRef}
             onScroll={updateScrollState}
           >
@@ -443,10 +545,12 @@ function BookmarkBar() {
           <button
             className={`bookmark-bar__scroll-btn ${canScrollRight ? "bookmark-bar__scroll-btn--visible" : ""}`}
             onClick={() => scrollTrack("right")}
-            aria-label="Scroll bookmarks right"
+            onMouseEnter={arrowHover(1)}
+            onMouseLeave={arrowHover(0)}
+            aria-label={t("bookmarks.scrollForward")}
             tabIndex={canScrollRight ? 0 : -1}
           >
-            <ChevronRight size={18} />
+            {vertical ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
           </button>
         </>
       )}

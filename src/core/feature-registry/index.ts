@@ -27,8 +27,16 @@ export interface FeatureDefinition {
   notifiable?: boolean;
   settingsSchema?: SettingsSchema;
   component: ComponentType | LazyExoticComponent<ComponentType>;
-  /** extra custom UI rendered below the schema form in Settings (e.g. wallpaper library) */
+  /** extra custom UI rendered with the schema form in Settings (e.g. wallpaper library) */
   settingsExtra?: ComponentType;
+  /** where settingsExtra goes relative to the form (default "bottom") */
+  settingsExtraPosition?: "top" | "bottom";
+  /**
+   * Floating UI mounted by the page whenever the feature is enabled — whatever
+   * its zone (e.g. a news bubble for a panel that is only mounted when opened).
+   * Must position itself (fixed) and render null when it has nothing to show.
+   */
+  overlay?: ComponentType;
   /** order within its zone (lower renders first) */
   order?: number;
 }

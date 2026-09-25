@@ -1,23 +1,10 @@
-/* Audio Mixer popup widget — matches popup.css's row/section look. */
-
-.amx {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.amx__label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
+/* Audio Mixer popup widget — mirrors popup.css's .popup__row (the section
+   frame is the shared <Collapsible>). */
 
 .amx__list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   list-style: none;
 }
 
@@ -25,15 +12,26 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--glass-bg);
+  transition:
+    background var(--dur-hover) ease-out,
+    border-color var(--dur-hover) ease-out;
+}
+
+.amx__row:hover {
+  border-color: var(--border);
+  background: var(--glass-bg-strong);
 }
 
 .amx__row-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   width: 100%;
+  padding-right: var(--space-1);
 }
 
 .amx__row-main {
@@ -42,6 +40,7 @@
   gap: var(--space-3);
   flex: 1;
   min-width: 0;
+  min-height: 42px;
   padding: var(--space-2) var(--space-3);
   border: none;
   background: none;
@@ -51,17 +50,17 @@
   text-align: left;
 }
 
-.amx__row-main:hover {
-  background: var(--glass-bg-strong);
-}
-
-.amx__favicon {
+/* same icon box as the tool rows */
+.amx__favicon,
+.amx__favicon-fallback {
   flex: none;
-  border-radius: 3px;
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .amx__favicon-fallback {
-  flex: none;
   color: var(--text-muted);
 }
 
@@ -69,7 +68,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
 .amx__mute--on {
@@ -82,6 +82,20 @@
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-2) var(--space-2) var(--space-3);
+}
+
+/* not captured yet: the start button sits in the title line (MixerTabRow);
+   its error wraps onto a line of its own */
+.amx__start-error {
+  flex-basis: 100%;
+  padding: 0 var(--space-3) var(--space-2);
+  font-size: 10.5px;
+  color: var(--danger, #e5484d);
+}
+
+.amx__row-top .ui-iconbtn {
+  width: 30px;
+  height: 30px;
 }
 
 .amx__volume-slider {
@@ -102,7 +116,6 @@
   font-size: 10px;
   color: var(--danger, #e5484d);
 }
-
 .amx__grant {
   display: flex;
   align-items: center;

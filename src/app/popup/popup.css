@@ -39,73 +39,76 @@ html:root > body {
   flex-direction: column;
   gap: var(--space-3);
   min-height: 160px;
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
   background: var(--theme-gradient, var(--bg));
 }
 
-/* ---------- header ---------- */
+/* ---------- header: brand left, home right ---------- */
 .popup__header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.popup__logo {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
 }
 
 .popup__brand {
   font-family: var(--font-heading);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .popup__version {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-muted);
 }
 
-/* ---------- primary action ---------- */
 .popup__home {
-  justify-content: center;
-  gap: var(--space-2);
-  width: 100%;
-  padding-block: var(--space-3);
-  font-size: 14px;
+  margin-left: auto;
+  gap: 6px;
+  border-radius: var(--radius-full);
   font-weight: 600;
 }
 
-/* ---------- sections ---------- */
-.popup__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.popup__label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.popup__label-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.popup__link {
-  border: none;
+/* header action chip ("See all (9)") — same shape as the count badge family */
+.popup__chip {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
   background: none;
-  color: var(--accent);
-  cursor: pointer;
+  color: var(--text-muted);
   font: inherit;
-  font-size: 11px;
-  padding: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--dur-hover) ease-out,
+    border-color var(--dur-hover) ease-out;
 }
 
-.popup__link:hover {
-  text-decoration: underline;
+.popup__chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.popup__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* ---------- app grid ---------- */
@@ -117,13 +120,15 @@ html:root > body {
 }
 
 .popup__tile {
-  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
+  justify-content: flex-start;
+  gap: 6px;
   width: 100%;
-  padding: var(--space-3) var(--space-2);
+  /* every tile the same height, one- or two-line name alike */
+  min-height: 78px;
+  padding: var(--space-3) var(--space-2) var(--space-2);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--glass-bg);
@@ -131,17 +136,27 @@ html:root > body {
   cursor: pointer;
   font: inherit;
   text-align: center;
-  overflow: hidden;
+  transition:
+    background var(--dur-hover) ease-out,
+    border-color var(--dur-hover) ease-out,
+    transform var(--dur-hover) ease-out;
 }
 
 .popup__tile:hover,
 .popup__tile:focus-visible {
-  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   background: var(--glass-bg-strong);
+  transform: translateY(-1px);
 }
 
 .popup__tile-icon {
+  display: grid;
   flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
 
@@ -156,29 +171,6 @@ html:root > body {
   overflow: hidden;
 }
 
-/* The description only exists on hover/focus — see the note in PopupApp.tsx. */
-.popup__tile-desc {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--surface-elevated);
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.35;
-  text-align: left;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-
-.popup__tile:hover .popup__tile-desc,
-.popup__tile:focus-visible .popup__tile-desc {
-  opacity: 1;
-}
-
 .popup__list {
   display: flex;
   flex-direction: column;
@@ -186,11 +178,13 @@ html:root > body {
   list-style: none;
 }
 
+/* the one row look — the Audio Mixer rows (amx__row) mirror it */
 .popup__row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   width: 100%;
+  min-height: 44px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -214,6 +208,10 @@ html:root > body {
 
 .popup__row-icon {
   flex: none;
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
 
@@ -260,11 +258,6 @@ html:root > body {
   padding: var(--space-2) var(--space-3);
   font-size: 12px;
   color: var(--text-muted);
-}
-
-.popup__empty--warn {
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .popup__error {

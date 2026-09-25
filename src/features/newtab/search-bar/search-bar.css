@@ -1,5 +1,8 @@
 .search-bar {
   position: relative;
+  /* backdrop-filter makes this a stacking context: give it a rank among the
+     center widgets so its dropdown isn't painted under the ones below it */
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: var(--space-3);

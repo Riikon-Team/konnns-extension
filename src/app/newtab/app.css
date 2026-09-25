@@ -17,15 +17,17 @@
   pointer-events: none;
 }
 .zone-center > * {
+  position: relative;
   pointer-events: auto;
+}
+.zone-center > *:focus-within {
+  z-index: 5;
 }
 .zone-center--top {
   justify-content: flex-start;
   padding-top: 14vh;
 }
 
-/* Full-width flex centering — NOT transform-based, because Framer Motion's
-   reveal animation controls `transform` and would override translateX/Y. */
 .zone-quick-access {
   position: fixed;
   left: 0;

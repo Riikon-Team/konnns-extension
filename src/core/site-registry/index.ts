@@ -11,6 +11,19 @@ import type { LucideIcon } from "lucide-react";
 
 export type SiteAppCategory = "media" | "text" | "dev" | "other";
 
+/** Display order of categories — shared by the home grid and the side nav. */
+export const SITE_CATEGORY_ORDER: SiteAppCategory[] = ["media", "text", "dev", "other"];
+
+/** Visible apps grouped by category, in SITE_CATEGORY_ORDER; empty groups dropped. */
+export function groupSiteApps<T extends { category?: SiteAppCategory }>(apps: T[]): Array<[SiteAppCategory, T[]]> {
+  const by = new Map<SiteAppCategory, T[]>();
+  for (const app of apps) {
+    const key = app.category ?? "other";
+    by.set(key, [...(by.get(key) ?? []), app]);
+  }
+  return SITE_CATEGORY_ORDER.filter((c) => by.has(c)).map((c) => [c, by.get(c)!]);
+}
+
 export interface SiteAppDefinition {
   id: string;
   /** hash route, always leading-slash: "/audio" → site.html#/audio */
@@ -27,6 +40,12 @@ export interface SiteAppDefinition {
   fullBleed?: boolean;
   /** reachable by route but not listed on the home grid / nav (e.g. viewers) */
   hidden?: boolean;
+  /**
+   * IndexedDB tables this app owns. The site Settings page uses it to show
+   * the app's storage, back it up on its own and clear it — declare every
+   * table the app writes, or its data is invisible there.
+   */
+  dataTables?: string[];
   order?: number;
 }
 

@@ -41,6 +41,12 @@ export default defineConfig({
     // per tab, and never at install (docs/site/07-audio-mixer.md).
     optional_permissions: ["bookmarks", "notifications", "topSites", "tabs", "clipboardRead", "tabCapture", "offscreen"],
     host_permissions: ["https://wallhaven.cc/*", "https://*.wallhaven.cc/*"],
+    commands: {
+      "capture-tab-audio": {
+        suggested_key: { default: "Alt+Shift+V" },
+        description: "Show this tab's music on the New Tab (toggle)",
+      },
+    },
     optional_host_permissions: ["*://*/*"],
     content_security_policy: {
       extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
@@ -52,30 +58,11 @@ export default defineConfig({
       },
     },
   },
-  /**
-   * Trình duyệt dev chạy trên một profile tạm mới mỗi lần (keepProfileChanges
-   * mặc định false), nên Chrome không nhớ kích thước cửa sổ và luôn mở bé tí —
-   * gần như không dùng được khi mở kèm DevTools. Ép một kích thước tử tế.
-   * Đổi số ở đây nếu muốn, hoặc thay bằng "--start-maximized".
-   */
   webExt: {
     chromiumArgs: ["--window-size=1600,1000", "--window-position=80,40"],
   },
   hooks: {
-    /**
-     * `registration: "runtime"` on the embed content script makes WXT copy its
-     * `matches` into `host_permissions`, which would show the scary "read all
-     * your data on every website" prompt at install time. We inject on demand
-     * with `activeTab` instead, so drop that ONE entry —
-     * `optional_host_permissions` above still lets the user opt into always-on
-     * mode later (docs/embed/00 §2).
-     *
-     * Two things this must NOT do:
-     *  - run in dev: `wxt` adds `http://localhost/*` here so extension pages
-     *    can load modules off the dev server. Removing it breaks every page
-     *    with a CORS error.
-     *  - delete the whole array: only the pattern we caused should go.
-     */
+   
     "build:manifestGenerated": (wxt, manifest) => {
       if (wxt.config.command === "serve") return;
       if (!manifest.host_permissions) return;

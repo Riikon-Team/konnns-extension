@@ -37,7 +37,7 @@ interface WallpaperState {
 }
 
 function toMeta(row: WallpaperRow): WallpaperMeta {
-  const { blob: _blob, ...meta } = row;
+  const { blob: _blob, original: _original, ...meta } = row;
   return meta;
 }
 
@@ -58,6 +58,9 @@ async function imageRow(source: Blob, name: string, auto?: boolean): Promise<Wal
     createdAt: Date.now(),
     lastUsedAt: Date.now(),
     ...(auto ? { auto: true } : {}),
+    // processImage hands the source back untouched when no work was needed —
+    // only a real re-encode is worth a second copy
+    ...(processed.blob !== source ? { original: source } : {}),
   };
 }
 
@@ -146,11 +149,18 @@ export const useWallpaperStore = create<WallpaperState>((set, get) => ({
   },
 }));
 
-/** Load a wallpaper blob as an object URL (caller revokes). */
-export async function getWallpaperUrl(id: string): Promise<{ url: string; type: "image" | "video" } | null> {
+/**
+ * Load a wallpaper as an object URL (caller revokes). `original: true` serves
+ * the uncompressed source when one was kept; otherwise the screen-fit copy.
+ */
+export async function getWallpaperUrl(
+  id: string,
+  opts: { original?: boolean } = {},
+): Promise<{ url: string; type: "image" | "video" } | null> {
   const row = await db.wallpapers.get(id);
   if (!row) return null;
-  return { url: URL.createObjectURL(row.blob), type: row.type };
+  const blob = opts.original && row.original ? row.original : row.blob;
+  return { url: URL.createObjectURL(blob), type: row.type };
 }
 
 /** i18n key for an error thrown by this store */

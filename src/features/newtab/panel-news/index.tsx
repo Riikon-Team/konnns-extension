@@ -6,15 +6,11 @@ import { useFeatureValues } from "@/core/settings-engine/settingsStore";
 import { useOnlineStatus } from "@/core/net";
 import { Button, ReloadButton, Skeleton } from "@/shared/ui";
 import { useNewsStore } from "./store";
-import {
-  CURATED_FEEDS,
-  TOPICS,
-  hasHostPermission,
-  requestHostPermission,
-  translateText,
-  type NewsArticle,
-} from "./rss";
+import { hasHostPermission, requestHostPermission, translateText, type NewsArticle } from "./rss";
 import { NewsSettings, NEWS_FEATURE_ID } from "./NewsSettings";
+import { resolveNewsFeeds } from "./feeds";
+import { NewsBubble } from "./NewsBubble";
+import { newsSettingsSchema } from "./settings.schema";
 import "./news.css";
 
 function timeAgo(ts: number, lang: string): string {
@@ -104,25 +100,10 @@ function PanelNews() {
   const [granted, setGranted] = useState<boolean | null>(null);
   const [reloading, setReloading] = useState(false);
 
-  const mode = (values.mode as string) ?? "topics";
-  const topics = (values.topics as string[]) ?? ["tech"];
-  const feedIds = (values.feeds as string[]) ?? ["techcrunch", "vne-news"];
   const translateEndpoint = ((values.translateEndpoint as string) ?? "").trim();
 
   // resolve the selected mode → concrete feed list + a cache key
-  const { feeds, cacheKey } =
-    mode === "rss"
-      ? {
-          feeds: CURATED_FEEDS.filter((f) => feedIds.includes(f.id)).map((f) => ({
-            url: f.url,
-            source: f.source,
-          })),
-          cacheKey: "rss:" + [...feedIds].sort().join(","),
-        }
-      : {
-          feeds: TOPICS.filter((tp) => topics.includes(tp.id)).flatMap((tp) => tp.feeds),
-          cacheKey: "topics:" + [...topics].sort().join(","),
-        };
+  const { feeds, cacheKey } = resolveNewsFeeds(values);
 
   useEffect(() => {
     void hasHostPermission().then(setGranted);
@@ -206,7 +187,9 @@ registerFeature({
   icon: Newspaper,
   defaultEnabled: false,
   requiresNetwork: true,
+  settingsSchema: newsSettingsSchema,
   settingsExtra: NewsSettings,
+  overlay: NewsBubble,
   component: PanelNews,
   order: 2,
 });

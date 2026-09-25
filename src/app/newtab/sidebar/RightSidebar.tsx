@@ -158,48 +158,85 @@ function WindowFrame({
   const Icon = feature.icon;
   const Content = feature.component;
 
-  const startDrag = (e: React.PointerEvent) => {
-    if (win.mode !== "floating") return;
+  const frameRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Drag/resize bypass React while the pointer moves: writing the store on
+   * every pointermove re-rendered every open window (and its tool) per frame.
+   * Instead the element's style is set directly, at most once per animation
+   * frame, and the store is written ONCE on release. The `--dragging` class
+   * also switches off the left/width transition that exists for dock
+   * animations — left on, it made the window trail ~280ms behind the cursor
+   * horizontally (top has no transition, hence "worst when moving sideways").
+   */
+  const track = (
+    e: React.PointerEvent,
+    apply: (el: HTMLDivElement, dx: number, dy: number) => void,
+    commit: (dx: number, dy: number) => void,
+  ) => {
+    const el = frameRef.current;
+    if (!el) return;
+    e.preventDefault(); // no text selection while dragging
     focus(feature.id);
     const startX = e.clientX;
     const startY = e.clientY;
-    const ox = win.position.x;
-    const oy = win.position.y;
+    let dx = 0;
+    let dy = 0;
+    let raf = 0;
+    el.classList.add("tool-window--dragging");
     const move = (ev: PointerEvent) => {
-      setPosition(
-        feature.id,
-        Math.max(0, Math.min(window.innerWidth - 80, ox + ev.clientX - startX)),
-        Math.max(0, Math.min(window.innerHeight - 40, oy + ev.clientY - startY)),
-      );
+      dx = ev.clientX - startX;
+      dy = ev.clientY - startY;
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          apply(el, dx, dy);
+        });
+      }
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      cancelAnimationFrame(raf);
+      el.classList.remove("tool-window--dragging");
+      commit(dx, dy);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
+  const startDrag = (e: React.PointerEvent) => {
+    if (win.mode !== "floating") return;
+    // let the header buttons (close/min/max/dock) receive their click
+    if ((e.target as HTMLElement).closest("button")) return;
+    const { x: ox, y: oy } = win.position;
+    const clampX = (dx: number) => Math.max(0, Math.min(window.innerWidth - 80, ox + dx));
+    const clampY = (dy: number) => Math.max(0, Math.min(window.innerHeight - 40, oy + dy));
+    track(
+      e,
+      (el, dx, dy) => {
+        el.style.left = `${clampX(dx)}px`;
+        el.style.top = `${clampY(dy)}px`;
+      },
+      (dx, dy) => setPosition(feature.id, clampX(dx), clampY(dy)),
+    );
   };
 
   const startResize = (e: React.PointerEvent) => {
     e.stopPropagation();
-    focus(feature.id);
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const ow = win.size.width;
-    const oh = win.size.height;
-    const move = (ev: PointerEvent) => {
-      setSize(
-        feature.id,
-        Math.max(260, ow + ev.clientX - startX),
-        Math.max(220, oh + ev.clientY - startY),
-      );
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    const { width: ow, height: oh } = win.size;
+    const w = (dx: number) => Math.max(260, ow + dx);
+    const h = (dy: number) => Math.max(220, oh + dy);
+    track(
+      e,
+      (el, dx, dy) => {
+        el.style.width = `${w(dx)}px`;
+        el.style.height = `${h(dy)}px`;
+      },
+      (dx, dy) => setSize(feature.id, w(dx), h(dy)),
+    );
   };
 
   // position/size per mode
@@ -231,6 +268,7 @@ function WindowFrame({
 
   return (
     <div
+      ref={frameRef}
       className={`tool-window tool-window--${win.mode} ${swapped ? "tool-window--swapped" : ""}`}
       style={style}
       onMouseDown={() => focus(feature.id)}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { CORE_FEATURE_ID, useFeatureValues, useSettingsStore } from "@/core/settings-engine/settingsStore";
+import { analyserSource, registerAudioSource } from "@/core/audio-signal";
 import {
   getTrackAudioUrl,
   randomTrackId,
@@ -17,6 +18,8 @@ class Visualizer {
   private ctx: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private data: Uint8Array<ArrayBuffer> | null = null;
+  /** high-resolution tap for core/audio-signal (music effects need real bass bins) */
+  hiRes: AnalyserNode | null = null;
 
   attach(audio: HTMLAudioElement) {
     if (this.ctx) return;
@@ -27,7 +30,17 @@ class Visualizer {
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 64;
       this.data = new Uint8Array(this.analyser.frequencyBinCount);
-      source.connect(this.analyser);
+      // fftSize 64 = ~750Hz per bin, far too coarse to find the bass; the
+      // corner bars keep theirs, effects get a 2048-point tap. Analysers pass
+      // audio through unchanged, so chaining them doesn't alter the sound.
+      this.hiRes = this.ctx.createAnalyser();
+      this.hiRes.fftSize = 2048;
+      // low: smoothing blunts kick onsets; effects smooth on their own side
+      this.hiRes.smoothingTimeConstant = 0.15;
+      // default −30 dB ceiling clips loud bass (no kick can rise above 255)
+      this.hiRes.maxDecibels = -10;
+      source.connect(this.hiRes);
+      this.hiRes.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
     } catch {
       /* AudioContext unavailable — visualizer stays inert */
@@ -46,6 +59,11 @@ class Visualizer {
 }
 
 export const visualizer = new Visualizer();
+
+// feed music effects (visualizer, wallpaper pulse) through the shared bus
+registerAudioSource(
+  analyserSource("musicbox", () => visualizer.hiRes, () => usePlayback.getState().playing),
+);
 
 /** Owns the single shared <audio> element. Mount exactly once (App.tsx) —
  * both the corner widget and the full player window read/drive playback

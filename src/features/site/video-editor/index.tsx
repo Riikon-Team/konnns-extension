@@ -11,6 +11,7 @@ registerSiteApp({
   category: "media",
   fullBleed: true,
   order: 35,
+  dataTables: ["videoProjects", "videoSources"],
   // lazy so mediabunny stays out of the site home bundle
   component: lazy(() => import("./VideoEditor")),
 });

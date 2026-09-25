@@ -99,6 +99,43 @@ export const wallpaperSettingsSchema = defineSchema({
     default: "",
     showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
   },
+  // moved here from Appearance (core) — only the wallpaper layer uses them
+  bgDim: {
+    type: "slider",
+    label: "wallpaper.bgDim",
+    description: "wallpaper.bgDimDesc",
+    min: 0,
+    max: 80,
+    step: 5,
+    default: 35,
+  },
+  bgBlur: {
+    type: "slider",
+    label: "wallpaper.bgBlur",
+    min: 0,
+    max: 24,
+    step: 1,
+    default: 0,
+  },
+  parallax: {
+    type: "toggle",
+    label: "wallpaper.parallax",
+    description: "wallpaper.parallaxDesc",
+    default: false,
+  },
+  parallaxIdle: {
+    type: "toggle",
+    label: "wallpaper.parallaxIdle",
+    description: "wallpaper.parallaxIdleDesc",
+    default: false,
+    showIf: (v) => v.parallax === true,
+  },
+  compress: {
+    type: "toggle",
+    label: "wallpaper.compress",
+    description: "wallpaper.compressDesc",
+    default: true,
+  },
   videoSound: { type: "toggle", label: "wallpaper.videoSound", default: false },
   videoVolume: {
     type: "slider",

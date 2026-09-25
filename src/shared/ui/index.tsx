@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { RefreshCw, X } from "lucide-react";
+import { ChevronDown, Eye, RefreshCw, X, type LucideIcon } from "lucide-react";
 import "./ui.css";
 
 /**
@@ -245,6 +245,76 @@ export function Segmented({
   );
 }
 
+/* ---------- Collapsible section ---------- */
+/**
+ * Titled block that folds/unfolds from its header (animated), remembering the
+ * choice per `id` in localStorage. Used by the popup's sections so every block
+ * — apps, audio, page tools — looks and behaves the same.
+ */
+export function Collapsible({
+  id,
+  title,
+  icon: Icon,
+  count,
+  hint,
+  action,
+  defaultOpen = true,
+  children,
+}: {
+  id: string;
+  title: string;
+  icon?: LucideIcon;
+  count?: number;
+  /** small muted note next to the title (e.g. "not available here") */
+  hint?: React.ReactNode;
+  /** extra control on the right of the header (stays clickable on its own) */
+  action?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const key = `ui.collapsible.${id}`;
+  const [open, setOpen] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved === null ? defaultOpen : saved === "1";
+    } catch {
+      return defaultOpen;
+    }
+  });
+  const toggle = () =>
+    setOpen((v) => {
+      try {
+        localStorage.setItem(key, v ? "0" : "1");
+      } catch {
+        /* storage blocked — still toggles, just forgets */
+      }
+      return !v;
+    });
+  const bodyId = `coll-${id}`;
+
+  return (
+    <section className={`ui-coll ${open ? "ui-coll--open" : ""}`}>
+      <div className="ui-coll__head">
+        <button type="button" className="ui-coll__toggle" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
+          {Icon && (
+            <span className="ui-coll__icon">
+              <Icon size={13} />
+            </span>
+          )}
+          <span className="ui-coll__title">{title}</span>
+          {count !== undefined && <span className="ui-coll__count">{count}</span>}
+          {hint && <span className="ui-coll__hint">{hint}</span>}
+          <ChevronDown size={14} className="ui-coll__chev" />
+        </button>
+        {action}
+      </div>
+      <div className="ui-coll__body" id={bodyId}>
+        <div className="ui-coll__inner">{children}</div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Field (label + control + description/error) ---------- */
 export function Field({
   label,
@@ -315,16 +385,27 @@ export function Modal({
   onClose,
   title,
   width,
+  peekLabel,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   width?: number | string;
+  /**
+   * Adds a "look through" eye button to the header: while it is held, the
+   * modal and backdrop go transparent so the page behind shows — e.g. to see
+   * a setting's effect without closing Settings. The string is its label.
+   */
+  peekLabel?: string;
   children: React.ReactNode;
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [peek, setPeek] = React.useState(false);
+  useEffect(() => {
+    if (!open) setPeek(false);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -339,7 +420,7 @@ export function Modal({
     <AnimatePresence>
       {open && (
         <motion.div
-          className="ui-modal-overlay"
+          className={`ui-modal-overlay ${peek ? "ui-modal-overlay--peek" : ""}`}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -349,7 +430,7 @@ export function Modal({
           }}
         >
           <motion.div
-            className="ui-modal"
+            className={`ui-modal ${peek ? "ui-modal--peek" : ""}`}
             style={{ width }}
             role="dialog"
             aria-modal="true"
@@ -362,9 +443,37 @@ export function Modal({
             {title && (
               <div className="ui-modal__header">
                 <span className="ui-modal__title">{title}</span>
-                <IconButton label="Close" onClick={onClose}>
-                  <X size={18} />
-                </IconButton>
+                <span className="ui-modal__actions">
+                  {peekLabel && (
+                    <IconButton
+                      label={peekLabel}
+                      className={`ui-modal__peek ${peek ? "ui-modal__peek--on" : ""}`}
+                      aria-pressed={peek}
+                      // held, not toggled: capture keeps the release even if
+                      // the pointer drifts off the button while looking
+                      onPointerDown={(e) => {
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        setPeek(true);
+                      }}
+                      onPointerUp={() => setPeek(false)}
+                      onPointerCancel={() => setPeek(false)}
+                      onLostPointerCapture={() => setPeek(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === " " || e.key === "Enter") {
+                          e.preventDefault();
+                          setPeek(true);
+                        }
+                      }}
+                      onKeyUp={() => setPeek(false)}
+                      onBlur={() => setPeek(false)}
+                    >
+                      <Eye size={17} />
+                    </IconButton>
+                  )}
+                  <IconButton label="Close" onClick={onClose}>
+                    <X size={18} />
+                  </IconButton>
+                </span>
               </div>
             )}
             <div className="ui-modal__body">{children}</div>

@@ -2,11 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Search, Sparkles, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { registerFeature } from "@/core/feature-registry";
-import {
-  CORE_FEATURE_ID,
-  useFeatureValues,
-  useSettingsStore,
-} from "@/core/settings-engine/settingsStore";
+import { useFeatureValues, useSettingsStore } from "@/core/settings-engine/settingsStore";
 import { brandIcons } from "@/shared/icons";
 import { buildSearchUrl, engines, getEngine, parseBang } from "./engines";
 import { searchSettingsSchema } from "./settings.schema";
@@ -24,6 +20,7 @@ interface SearchValues {
   customUrl?: string;
   position?: string;
   suggestions?: boolean;
+  autofocus?: boolean;
 }
 
 function SearchBar() {
@@ -47,7 +44,7 @@ function SearchBar() {
   const [highlight, setHighlight] = useState(-1);
   const [permission, setPermission] = useState<"unknown" | "granted" | "missing">("unknown");
 
-  const autofocus = useFeatureValues(CORE_FEATURE_ID).searchAutofocus === true;
+  const autofocus = values.autofocus === true;
   useEffect(() => {
     if (autofocus) inputRef.current?.focus();
   }, [autofocus]);
@@ -222,13 +219,13 @@ function SearchBar() {
   );
 }
 
-// Mirror "search bar on + General › autofocus on" into the sync flag the
-// entrypoint reads before boot. Runs on every settings change; writes only on change.
+// Mirror "search bar on + its autofocus on" into the sync flag the entrypoint
+// reads before boot. Runs on every settings change; writes only on change.
 let lastFocusFlag: boolean | null = null;
 useSettingsStore.subscribe((s) => {
   if (!s.hydrated) return;
   const on =
-    (s.enabled[SEARCH_FEATURE_ID] ?? true) && s.values[CORE_FEATURE_ID]?.searchAutofocus === true;
+    (s.enabled[SEARCH_FEATURE_ID] ?? true) && s.values[SEARCH_FEATURE_ID]?.autofocus === true;
   if (on === lastFocusFlag) return;
   lastFocusFlag = on;
   writeFocusFlag(on);

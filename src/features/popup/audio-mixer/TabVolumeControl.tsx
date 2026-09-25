@@ -37,6 +37,12 @@ export function TabVolumeControl({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const fail = (key: string, raw?: string) => {
+    // the browser's raw reason goes to the console (the friendly key to the UI)
+    if (raw) console.warn("[audio-mixer] capture failed:", raw);
+    setError(key);
+  };
+
   const start = async () => {
     setBusy(true);
     setError(null);
@@ -45,27 +51,29 @@ export function TabVolumeControl({
         (await hasPermissions({ permissions: ["tabCapture", "offscreen"] })) ||
         (await requestPermissions({ permissions: ["tabCapture", "offscreen"] }));
       if (!granted) {
-        setError("audioMixer.permissionDenied");
+        fail("audioMixer.permissionDenied");
         return;
       }
 
-      const streamId = await getMediaStreamId(tabId);
-      if (!streamId) {
-        setError("audioMixer.errCaptureFailed");
+      // the worker mints the stream id (Chrome's documented offscreen pattern)
+      // using the activeTab grant this popup's opening gave the tab
+      const reply = (await sendToBackground({ type: "tabMixer:start", tabId, gain: DEFAULT_GAIN })) as
+        | { ok?: boolean; error?: string }
+        | undefined;
+      if (reply === undefined) {
+        // Unpacked extensions serve pages fresh from disk, but the service
+        // worker keeps running the code it started with until the extension is
+        // reloaded — a new popup talking to an old worker gets no answer.
+        fail("audioMixer.errStaleWorker", "no reply from background (worker older than this popup?)");
         return;
       }
-
-      const reply = (await sendToBackground({ type: "tabMixer:capture", tabId, streamId, gain: DEFAULT_GAIN })) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!reply?.ok) {
-        setError(reply?.error ?? "audioMixer.errCaptureFailed");
+      if (!reply.ok) {
+        fail(explainCaptureError(reply.error), reply.error);
         return;
       }
       onGainChange(DEFAULT_GAIN);
-    } catch {
-      setError("audioMixer.errCaptureFailed");
+    } catch (err) {
+      fail("audioMixer.errCaptureFailed", err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -82,13 +90,15 @@ export function TabVolumeControl({
   };
 
   if (gain === undefined) {
+    // not captured: rendered INSIDE the row's title line (MixerTabRow); the
+    // error wraps onto its own line below (flex-basis 100%)
     return (
-      <div className="amx__volume">
+      <>
         <IconButton label={t("audioMixer.enableVolume")} disabled={busy} onClick={() => void start()}>
           <SlidersHorizontal size={14} />
         </IconButton>
-        {error && <span className="amx__volume-error">{t(error)}</span>}
-      </div>
+        {error && <span className="amx__start-error">{t(error)}</span>}
+      </>
     );
   }
 
@@ -112,16 +122,15 @@ export function TabVolumeControl({
   );
 }
 
-/** `chrome.tabCapture` has no promise form in the polyfill, and this must not lose the user gesture on the way. */
-function getMediaStreamId(targetTabId: number): Promise<string | null> {
-  return new Promise((resolve) => {
-    const api = (globalThis as { chrome?: { tabCapture?: { getMediaStreamId?: (opts: { targetTabId: number }, cb: (id?: string) => void) => void } } }).chrome
-      ?.tabCapture;
-    if (!api?.getMediaStreamId) return resolve(null);
-    try {
-      api.getMediaStreamId({ targetTabId }, (id) => resolve(id ?? null));
-    } catch {
-      resolve(null);
-    }
-  });
+/**
+ * Browser reason → an i18n key. The one that matters: "has not been invoked"
+ * = no activeTab for this tab. A popup opened BY CODE (the shortcut does that
+ * when permission is still missing) doesn't count as invoking the extension —
+ * only the user's own icon click or keyboard shortcut does.
+ */
+function explainCaptureError(reason: string | undefined): string {
+  if (!reason) return "audioMixer.errCaptureFailed";
+  if (/not been invoked|activeTab/i.test(reason)) return "audioMixer.errNotInvoked";
+  if (/chrome pages|cannot be captured/i.test(reason)) return "audioMixer.errCannotCapture";
+  return reason.startsWith("audioMixer.") ? reason : "audioMixer.errCaptureFailed";
 }

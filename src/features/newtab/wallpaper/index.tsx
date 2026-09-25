@@ -206,30 +206,71 @@ function WallpaperLayer() {
       : isLocalRandom && randomId
         ? randomId
         : ((values.activeId as string) ?? ""));
+  // "fit to screen" on → the downscaled copy; off → the original, when one was kept
+  const compress = values.compress !== false;
   const lowPower =
     coreValues.lowPower === true ||
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const parallaxOn = coreValues.parallax === true && !lowPower;
+  const parallaxOn = values.parallax === true && !lowPower;
+  const idleSway = parallaxOn && values.parallaxIdle === true;
   const layerRef = useRef<HTMLDivElement>(null);
 
-  // parallax: shift the wallpaper slightly opposite the pointer (docs request, optional)
+  // Parallax: the wallpaper shifts slightly opposite the pointer. With "idle
+  // sway", once the mouse rests it drifts on its own along a slow, never-
+  // repeating path (two sines per axis, random phases per tab). One rAF loop
+  // eases toward whichever target applies — frame-rate independent, and it
+  // stops writing once settled.
   useEffect(() => {
-    if (!parallaxOn) {
-      layerRef.current?.style.removeProperty("--parallax-x");
-      layerRef.current?.style.removeProperty("--parallax-y");
+    const el = layerRef.current;
+    if (!parallaxOn || !el) {
+      el?.style.removeProperty("--parallax-x");
+      el?.style.removeProperty("--parallax-y");
       return;
     }
+    const MAX = 14; // px at the screen edge
+    const IDLE_AFTER = 2500; // ms without mouse movement
+    const ph = Array.from({ length: 4 }, () => Math.random() * Math.PI * 2);
+    let tx = 0;
+    let ty = 0;
+    let x = 0;
+    let y = 0;
+    let lastMove = performance.now();
+    let lastT = 0;
+    let raf = 0;
+
     const onMove = (e: MouseEvent) => {
-      const cx = (e.clientX / window.innerWidth - 0.5) * 2;
-      const cy = (e.clientY / window.innerHeight - 0.5) * 2;
-      const max = 14;
-      layerRef.current?.style.setProperty("--parallax-x", `${(-cx * max).toFixed(1)}px`);
-      layerRef.current?.style.setProperty("--parallax-y", `${(-cy * max).toFixed(1)}px`);
+      tx = -(e.clientX / window.innerWidth - 0.5) * 2;
+      ty = -(e.clientY / window.innerHeight - 0.5) * 2;
+      lastMove = performance.now();
+    };
+    const loop = (t: number) => {
+      raf = requestAnimationFrame(loop);
+      const dt = lastT ? Math.min(100, t - lastT) : 16;
+      lastT = t;
+      const idle = idleSway && t - lastMove > IDLE_AFTER;
+      if (idle) {
+        const s = t / 1000;
+        tx = 0.55 * Math.sin(s * 0.21 + ph[0]) + 0.3 * Math.sin(s * 0.083 + ph[1]);
+        ty = 0.55 * Math.sin(s * 0.17 + ph[2]) + 0.3 * Math.sin(s * 0.061 + ph[3]);
+      }
+      // quick follow for the mouse, lazy glide for the drift (and the hand-over)
+      const k = 1 - Math.exp(-dt / (idle ? 900 : 120));
+      const nx = x + (tx - x) * k;
+      const ny = y + (ty - y) * k;
+      if (Math.abs(nx - x) * MAX < 0.01 && Math.abs(ny - y) * MAX < 0.01) return; // settled
+      x = nx;
+      y = ny;
+      el.style.setProperty("--parallax-x", `${(x * MAX).toFixed(2)}px`);
+      el.style.setProperty("--parallax-y", `${(y * MAX).toFixed(2)}px`);
     };
     window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [parallaxOn]);
+    raf = requestAnimationFrame(loop);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      cancelAnimationFrame(raf);
+    };
+  }, [parallaxOn, idleSway]);
 
   const videoSound = values.videoSound === true;
   const videoVolume = typeof values.videoVolume === "number" ? values.videoVolume : 50;
@@ -295,7 +336,7 @@ function WallpaperLayer() {
     }
 
     void (async () => {
-      const res = await getWallpaperUrl(activeId);
+      const res = await getWallpaperUrl(activeId, { original: !compress });
       if (!res || cancelled) return;
 
       // low-power mode: never play video wallpapers, keep gradient instead
@@ -363,7 +404,7 @@ function WallpaperLayer() {
     return () => {
       cancelled = true;
     };
-  }, [activeId, lowPower, touch]);
+  }, [activeId, lowPower, touch, compress]);
 
   useEffect(() => {
     const urls = urlsRef.current;
@@ -376,6 +417,15 @@ function WallpaperLayer() {
     <div
       ref={layerRef}
       className={`wallpaper-layer ${parallaxOn ? "wallpaper-layer--parallax" : ""}`}
+      // dim/blur live on the layer itself (they used to be global, set by the theme engine)
+      style={
+        {
+          "--wallpaper-dim": String((typeof values.bgDim === "number" ? values.bgDim : 35) / 100),
+          "--wallpaper-blur": `${typeof values.bgBlur === "number" ? values.bgBlur : 0}px`,
+        } as React.CSSProperties
+      }
+      // opt in to the music bass pulse (music-fx writes --music-pulse here)
+      data-music-pulse=""
       aria-hidden
     >
       {layers.map((l) =>
@@ -402,6 +452,28 @@ function WallpaperLayer() {
     </div>
   );
 }
+
+// Parallax, dim and blur used to live in Appearance (core); carry them over
+// once each (separate flags: parallax moved in an earlier release).
+let appearanceMigrated = false;
+const stopAppearanceMigration = useSettingsStore.subscribe((s) => {
+  if (!s.hydrated || appearanceMigrated) return;
+  appearanceMigrated = true;
+  queueMicrotask(() => stopAppearanceMigration());
+  const wp = s.values[WALLPAPER_FEATURE_ID] ?? {};
+  const core = s.values[CORE_FEATURE_ID] ?? {};
+  const patch: Record<string, unknown> = {};
+  if (wp.parallaxMigrated !== true) {
+    patch.parallaxMigrated = true;
+    if (core.parallax === true) patch.parallax = true;
+  }
+  if (wp.dimBlurMigrated !== true) {
+    patch.dimBlurMigrated = true;
+    if (typeof core.bgDim === "number") patch.bgDim = core.bgDim;
+    if (typeof core.bgBlur === "number") patch.bgBlur = core.bgBlur;
+  }
+  if (Object.keys(patch).length > 0) s.setValues(WALLPAPER_FEATURE_ID, patch);
+});
 
 registerFeature({
   id: WALLPAPER_FEATURE_ID,

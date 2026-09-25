@@ -28,6 +28,12 @@ export interface WallpaperRow {
   lastUsedAt: number;
   /** downloaded automatically (random-on-open) — pruned, never user-picked */
   auto?: boolean;
+  /**
+   * The untouched source image, kept only when `blob` is a downscaled /
+   * re-encoded copy — so the "fit to screen" setting can be switched off
+   * without re-adding the image. Absent = `blob` already is the original.
+   */
+  original?: Blob;
 }
 
 export interface AvatarRow {

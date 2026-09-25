@@ -8,18 +8,6 @@ import {
 } from "@/core/settings-engine/settingsStore";
 import { Field, Select } from "@/shared/ui";
 
-/**
- * Language and colour mode, reachable from the site itself.
- *
- * The site shares the NewTab's settings store, so it already FOLLOWED those
- * choices — but there was no way to make one without leaving for the NewTab,
- * which is a strange trip when the site is a surface of its own.
- *
- * Deliberately only the two settings that change how this page reads. The
- * full settings modal is a NewTab component wired to feature registries the
- * site does not host; dragging it over here would couple the two surfaces to
- * save one click.
- */
 export function QuickSettings() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -35,12 +23,6 @@ export function QuickSettings() {
     const close = (e: PointerEvent) => {
       const el = e.target as HTMLElement | null;
       if (boxRef.current?.contains(el)) return;
-      /**
-       * Select renders its option list through a portal on document.body, so
-       * by DOM containment a click on an option lands "outside" this popover.
-       * Closing on it unmounted the Select before its own click handler ran —
-       * which is why picking a language or theme appeared to do nothing.
-       */
       if (el?.closest?.(".ui-select-menu")) return;
       setOpen(false);
     };

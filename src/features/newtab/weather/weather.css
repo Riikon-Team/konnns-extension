@@ -1,0 +1,85 @@
+/* Weather summary (moved from clock-weather when weather became its own feature) */
+.weather-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--text);
+  font-size: 16px;
+  text-shadow: 0 1px 10px var(--shadow-color);
+}
+.weather-summary__icon {
+  color: var(--accent);
+  filter: drop-shadow(0 1px 6px var(--shadow-color));
+}
+.weather-summary__temp {
+  font-size: 22px;
+  font-weight: 700;
+}
+.weather-summary__meta {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.weather-summary__setup {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  transition: color var(--dur-hover) ease-out;
+}
+.weather-summary__setup:hover {
+  color: var(--text);
+}
+.weather-summary__offline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+/* compact variant used inside the bubble */
+.weather-summary--compact {
+  justify-content: flex-start;
+  gap: var(--space-2);
+  font-size: 13px;
+  text-shadow: none;
+}
+.weather-summary--compact .weather-summary__temp {
+  font-size: 17px;
+}
+.weather-summary--compact .weather-summary__meta {
+  flex-basis: 100%;
+  font-size: 11.5px;
+}
+.weather-summary--compact .weather-summary__setup {
+  font-size: 12.5px;
+}
+
+/* ---------- bubble (top-left) ---------- */
+.weather-bubble {
+  position: fixed;
+  left: var(--space-5);
+  top: var(--space-5);
+  z-index: 22;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong, var(--surface-elevated));
+  backdrop-filter: blur(var(--glass-blur, 14px));
+  box-shadow: var(--shadow-soft);
+  transition:
+    opacity var(--dur-panel) var(--ease-out),
+    transform var(--dur-panel) var(--ease-out);
+}
+/* a left panel is open — slide away instead of sitting over it */
+.weather-bubble--hidden {
+  opacity: 0;
+  transform: translateX(-16px);
+  pointer-events: none;
+}

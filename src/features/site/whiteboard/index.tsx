@@ -11,6 +11,7 @@ registerSiteApp({
   category: "other",
   fullBleed: true,
   order: 32,
+  dataTables: ["boards", "boardFiles"],
   // lazy so Excalidraw (+ roughjs, perfect-freehand, its ~1MB bundle) stays out of the site home bundle
   component: lazy(() => import("./Whiteboard")),
 });

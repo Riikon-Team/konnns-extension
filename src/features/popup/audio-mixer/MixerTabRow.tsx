@@ -45,6 +45,10 @@ export function MixerTabRow({
           )}
           <span className="amx__title">{tab.title || t("audioMixer.untitledTab")}</span>
         </button>
+        {/* not captured yet → the start button lives in this line, no extra row */}
+        {volumeGain === null && (
+          <TabVolumeControl tabId={tab.tabId} gain={undefined} onGainChange={onVolumeChange} />
+        )}
         <IconButton
           label={tab.muted ? t("audioMixer.unmute") : t("audioMixer.mute")}
           className={tab.muted ? "amx__mute--on" : ""}
@@ -53,8 +57,8 @@ export function MixerTabRow({
           {tab.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </IconButton>
       </div>
-      {volumeGain !== undefined && (
-        <TabVolumeControl tabId={tab.tabId} gain={volumeGain ?? undefined} onGainChange={onVolumeChange} />
+      {typeof volumeGain === "number" && (
+        <TabVolumeControl tabId={tab.tabId} gain={volumeGain} onGainChange={onVolumeChange} />
       )}
     </li>
   );

@@ -18,8 +18,8 @@ import { registerFeature } from "@/core/feature-registry";
 import { useFeatureValues } from "@/core/settings-engine/settingsStore";
 import { useOnlineStatus } from "@/core/net";
 import { ReloadButton, Skeleton } from "@/shared/ui";
-import { CLOCK_FEATURE_ID } from "@/features/newtab/clock-weather";
-import { describeWeatherCode, useWeatherStore } from "@/features/newtab/clock-weather/weather";
+import { WEATHER_FEATURE_ID } from "@/features/newtab/weather";
+import { describeWeatherCode, useWeatherStore } from "@/features/newtab/weather/weather";
 import { TempChart } from "./TempChart";
 import { SunArc } from "./SunArc";
 import { weatherDetailSettingsSchema } from "./settings.schema";
@@ -46,8 +46,8 @@ function dayName(iso: string, lang: string): string {
 
 function PanelWeatherDetail() {
   const { t, i18n } = useTranslation();
-  // shares location with the NewTab clock/weather summary (no duplicate config)
-  const clock = useFeatureValues(CLOCK_FEATURE_ID);
+  // shares location with the NewTab weather summary (no duplicate config)
+  const clock = useFeatureValues(WEATHER_FEATURE_ID);
   const wd = useFeatureValues(WEATHER_DETAIL_FEATURE_ID);
   const online = useOnlineStatus();
   const { forecastStatus, forecast, forecastOffline, fetchForecast } = useWeatherStore();

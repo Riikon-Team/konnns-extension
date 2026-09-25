@@ -18,6 +18,14 @@ export const searchSettingsSchema = defineSchema({
     placeholder: "search.customUrlDesc",
     showIf: (v) => v.engine === "custom",
   },
+  // off by default: stealing focus from the address bar costs one extra page
+  // load and leaves the extension URL showing (./focus.ts)
+  autofocus: {
+    type: "toggle",
+    label: "search.autofocus",
+    description: "search.autofocusDesc",
+    default: false,
+  },
   suggestions: {
     type: "toggle",
     label: "search.suggestions",

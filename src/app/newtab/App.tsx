@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { getFeaturesByZone } from "@/core/feature-registry";
+import { getFeatures, getFeaturesByZone } from "@/core/feature-registry";
 import {
   coreSettingsSchemaRef,
   useFeatureEnabled,
@@ -71,6 +71,7 @@ function AppReady() {
   const background = getFeaturesByZone("background");
   const center = getFeaturesByZone("center");
   const quickAccess = getFeaturesByZone("quick-access-bar");
+  const overlays = getFeatures().filter((f) => f.overlay);
 
   const searchValues = useFeatureValues("search-bar");
   const bookmarkValues = useFeatureValues("bookmark-bar");
@@ -107,6 +108,15 @@ function AppReady() {
           </ZoneFeature>
         ))}
       </motion.div>
+
+      {overlays.map((f) => {
+        const Overlay = f.overlay!;
+        return (
+          <ZoneFeature key={`overlay-${f.id}`} featureId={f.id}>
+            <Overlay />
+          </ZoneFeature>
+        );
+      })}
 
       <LeftSidebar />
       <RightSidebar />

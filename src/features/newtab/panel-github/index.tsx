@@ -11,7 +11,9 @@ import {
   computeLanguageStats,
   fetchNotifications,
   fetchProfile,
+  fetchPublicProfile,
   fetchTrending,
+  requestContributionsAccess,
   type GitHubNotification,
   type GitHubProfile,
   type LanguageStat,
@@ -20,15 +22,21 @@ import {
 } from "./api";
 import { githubSettingsSchema } from "./settings.schema";
 import { ContribGraph } from "./ContribGraph";
+import { GitHubAccount } from "./GitHubAccount";
+import { GITHUB_FEATURE_ID, githubConnection } from "./connection";
 import "./github.css";
 
-export const GITHUB_FEATURE_ID = "panel-github";
+export { GITHUB_FEATURE_ID };
 
 function PanelGitHub() {
   const { t } = useTranslation();
   const values = useFeatureValues(GITHUB_FEATURE_ID);
   const online = useOnlineStatus();
-  const token = ((values.token as string) ?? "").trim();
+  const conn = githubConnection(values);
+  // token only counts in token mode (a leftover token must not leak into username mode)
+  const token = conn.mode === "token" ? conn.token : "";
+  const username = conn.mode === "username" ? conn.username : "";
+  const identity = conn.mode === "token" ? `token` : `user:${username.toLowerCase()}`;
   const showTrending = values.showTrending === true;
   const showRecentRepos = values.showRecentRepos !== false;
   const showLanguageStats = values.showLanguageStats === true;
@@ -46,13 +54,13 @@ function PanelGitHub() {
   const [reloading, setReloading] = useState(false);
 
   useEffect(() => {
-    if (showTrending && token) void fetchTrending(token, trendWindow).then(setTrending);
+    if (showTrending && conn.ready) void fetchTrending(token, trendWindow).then(setTrending);
     else setTrending([]);
-  }, [showTrending, token, trendWindow, online]);
+  }, [showTrending, conn.ready, token, trendWindow, online]);
 
   const load = useCallback(
     async (force?: boolean) => {
-      if (!token) {
+      if (!conn.ready) {
         setStatus("idle");
         setProfile(null);
         return;
@@ -61,10 +69,11 @@ function PanelGitHub() {
 
       await swr<GitHubProfile>({
         namespace: "github",
-        key: "me",
+        // per identity, so switching account/mode never shows the previous one
+        key: identity === "token" ? "me" : identity,
         ttlMs: 60 * 60 * 1000, // contribution graph caches ~1h (docs/phase-3 §2)
         force,
-        fetcher: () => fetchProfile(token),
+        fetcher: () => (token ? fetchProfile(token) : fetchPublicProfile(username)),
         onData: (data) => {
           setProfile(data);
           setStatus("success");
@@ -74,7 +83,12 @@ function PanelGitHub() {
         },
       });
 
-      // notifications — fresher; raise an in-app/OS notification when count rises
+      // notifications need a token — username mode has none
+      if (!token) {
+        setNotifs([]);
+        return;
+      }
+      // fresher than the profile; raise an in-app/OS notification when count rises
       const list = await fetchNotifications(token);
       setNotifs(list);
       const count = list.length;
@@ -85,22 +99,23 @@ function PanelGitHub() {
       localStorage.setItem("github.lastUnread", String(count));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token],
+    [identity, token, username, conn.ready],
   );
 
   useEffect(() => {
+    setProfile(null); // don't flash the previous account while the new one loads
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, online]);
+  }, [identity, token, online]);
 
   const forceReload = async () => {
     setReloading(true);
     await load(true);
-    if (showTrending && token) setTrending(await fetchTrending(token, trendWindow));
+    if (showTrending && conn.ready) setTrending(await fetchTrending(token, trendWindow));
     setReloading(false);
   };
 
-  if (!token) {
+  if (!conn.ready) {
     return (
       <div className="news__perm">
         <p className="ui-field__desc">{t("github.notConnected")}</p>
@@ -155,10 +170,29 @@ function PanelGitHub() {
         </span>
       </div>
 
-      <div className="gh__section-title">
-        {profile.totalContributions} {t("github.contributions")}
-      </div>
-      <ContribGraph weeks={profile.weeks} />
+      {profile.weeks.length > 0 ? (
+        <>
+          <div className="gh__section-title">
+            {profile.totalContributions} {t("github.contributions")}
+          </div>
+          <ContribGraph weeks={profile.weeks} />
+        </>
+      ) : (
+        // username mode without github.com access: offer it right here
+        !token && (
+          <button
+            type="button"
+            className="gh__calendar-cta"
+            onClick={() =>
+              void requestContributionsAccess().then((ok) => {
+                if (ok) void load(true);
+              })
+            }
+          >
+            {t("github.allowCalendar")}
+          </button>
+        )
+      )}
 
       {showLanguageStats && languageStats.length > 0 && (
         <>
@@ -276,6 +310,8 @@ registerFeature({
   requiresNetwork: true,
   notifiable: true,
   settingsSchema: githubSettingsSchema,
+  settingsExtra: GitHubAccount,
+  settingsExtraPosition: "top", // connect first, then the display options
   component: PanelGitHub,
   order: 3,
 });

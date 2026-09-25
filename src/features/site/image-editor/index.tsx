@@ -11,6 +11,7 @@ registerSiteApp({
   category: "media",
   fullBleed: true,
   order: 34,
+  dataTables: ["imageProjects", "imageAssets"],
   // lazy so fabric.js stays out of the site home bundle
   component: lazy(() => import("./ImageEditor")),
 });

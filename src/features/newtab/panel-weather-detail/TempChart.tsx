@@ -1,4 +1,4 @@
-import type { HourlyPoint } from "@/features/newtab/clock-weather/weather";
+import type { HourlyPoint } from "@/features/newtab/weather/weather";
 
 /**
  * Minimal hand-drawn SVG line chart for the next-24h temperature — avoids a

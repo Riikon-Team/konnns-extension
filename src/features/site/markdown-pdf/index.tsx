@@ -11,6 +11,7 @@ registerSiteApp({
   category: "text",
   fullBleed: true,
   order: 31,
+  dataTables: ["markdownDocs"],
   // lazy so CodeMirror + markdown-it + DOMPurify stay out of the site home bundle
   component: lazy(() => import("./MarkdownEditor")),
 });

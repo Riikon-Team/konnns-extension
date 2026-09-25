@@ -7,7 +7,7 @@
  * not readable synchronously before the app boots.
  *
  * Trade-off: the address bar then shows the extension URL instead of staying
- * empty — which is why it is an opt-in flag (General › searchAutofocus, off).
+ * empty — which is why it is an opt-in flag (search bar › autofocus, off).
  */
 export const FOCUS_FLAG_KEY = "newtab.focusSearch";
 export const FOCUS_PARAM = "focus";

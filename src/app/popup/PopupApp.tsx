@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { browser } from "wxt/browser";
 import { useTranslation } from "react-i18next";
-import { Ban, House, Loader2, Play, SlidersHorizontal } from "lucide-react";
+import { Ban, Globe, House, LayoutGrid, Loader2, Play, SlidersHorizontal } from "lucide-react";
 import {
   CORE_FEATURE_ID,
   coreSettingsSchemaRef,
@@ -25,7 +25,7 @@ import {
 } from "@/core/messaging";
 import { EMBED_CATALOG, EMBED_SETTINGS_ID, type EmbedToolEntry } from "@/features/embed/catalog";
 import { coreSettingsSchema } from "@/app/newtab/settings/coreSettings";
-import { Button } from "@/shared/ui";
+import { Button, Collapsible } from "@/shared/ui";
 import { ToolResultCard } from "./ToolResultCard";
 import "./popup.css";
 
@@ -137,61 +137,70 @@ function PopupBody() {
   return (
     <>
       <header className="popup__header">
-        <span className="popup__brand">Tools & Apps </span>
+        <span className="popup__logo" aria-hidden>
+          <LayoutGrid size={15} />
+        </span>
+        <span className="popup__brand">Tools & Apps</span>
         <span className="popup__version">v{browser.runtime.getManifest().version}</span>
+        <Button size="sm" variant="primary" className="popup__home" onClick={() => openSite("/")}>
+          <House size={14} />
+          {t("popup.home")}
+        </Button>
       </header>
 
-      <Button variant="primary" className="popup__home" onClick={() => openSite("/")}>
-        <House size={16} />
-        {t("popup.openHome")}
-      </Button>
-
-      <section className="popup__section">
-        <div className="popup__label-row">
-          <h2 className="popup__label">{showAllApps ? t("popup.apps") : t("popup.appsFrequent")}</h2>
-          {apps.length > SHORTCUT_COUNT && (
-            <button type="button" className="popup__link" onClick={() => setShowAllApps((v) => !v)}>
+      <Collapsible
+        id="popup.apps"
+        title={showAllApps ? t("popup.apps") : t("popup.appsFrequent")}
+        icon={LayoutGrid}
+        action={
+          apps.length > SHORTCUT_COUNT && (
+            <button type="button" className="popup__chip" onClick={() => setShowAllApps((v) => !v)}>
               {showAllApps ? t("popup.showLess") : t("popup.showAllApps", { count: apps.length })}
             </button>
-          )}
-        </div>
-
+          )
+        }
+      >
         {apps.length === 0 ? (
           <p className="popup__empty">{t("popup.noApps")}</p>
         ) : (
           <ul className="popup__grid">
             {shownApps.map((app) => (
               <li key={app.id}>
-                {/* the description is a hover/focus overlay, not a second
-                    line — a grid of tiles stays scannable only if each tile
-                    is icon + name, and the popup has no room for both */}
+                {/* icon + name only; the description is the tooltip — an
+                    overlay covering the whole tile read as a glitch */}
                 <button
                   type="button"
                   className="popup__tile"
                   onClick={() => openSite(app.path, app.id)}
                   title={t(app.descKey)}
                 >
-                  <app.icon size={20} className="popup__tile-icon" />
+                  <span className="popup__tile-icon">
+                    <app.icon size={18} />
+                  </span>
                   <span className="popup__tile-name">{t(app.nameKey)}</span>
-                  <span className="popup__tile-desc">{t(app.descKey)}</span>
                 </button>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Collapsible>
 
       {widgets.map((w) => (
         <w.component key={w.id} />
       ))}
 
-      <section className="popup__section">
-        <h2 className="popup__label">{t("popup.onThisPage")}</h2>
-        {tabReady && !canEmbed && (
-          <p className="popup__empty popup__empty--warn">
-            <Ban size={13} /> {t("popup.cannotRunHere")}
-          </p>
-        )}
+      <Collapsible
+        id="popup.page"
+        title={t("popup.onThisPage")}
+        icon={Globe}
+        hint={
+          tabReady && !canEmbed ? (
+            <span className="popup__hint">
+              <Ban size={11} /> {t("popup.cannotRunHereShort")}
+            </span>
+          ) : undefined
+        }
+      >
         {EMBED_CATALOG.length === 0 ? (
           <p className="popup__empty">{t("popup.noTools")}</p>
         ) : (
@@ -246,7 +255,7 @@ function PopupBody() {
           </ul>
         )}
         {run.status === "error" && <p className="popup__error">{t(run.message)}</p>}
-      </section>
+      </Collapsible>
     </>
   );
 }

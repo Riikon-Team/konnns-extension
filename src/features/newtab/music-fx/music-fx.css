@@ -1,0 +1,48 @@
+/* Visualizer overlay — never intercepts the mouse, whatever layer it sits on */
+.music-fx {
+  position: fixed;
+  pointer-events: none;
+  opacity: var(--viz-opacity, 0.8);
+  transition: opacity 500ms ease-out;
+}
+.music-fx--idle {
+  opacity: 0;
+}
+
+/* above: over the center widgets (10) and quick-access bar (20), under tool
+   windows (30+) and every modal. behind: just above the wallpaper (0). */
+.music-fx--above {
+  z-index: 25;
+}
+.music-fx--behind {
+  z-index: 1;
+}
+
+.music-fx--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--viz-h, 140px);
+}
+.music-fx--top {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--viz-h, 140px);
+}
+.music-fx--center {
+  left: 50%;
+  top: 50%;
+  width: min(900px, 92vw);
+  height: max(var(--viz-h, 140px), 160px);
+  transform: translate(-50%, -50%);
+}
+.music-fx--full {
+  inset: 0;
+}
+
+.music-fx__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}

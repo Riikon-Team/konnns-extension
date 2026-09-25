@@ -17,10 +17,18 @@
  */
 
 import { browser } from "wxt/browser";
+import {
+  AUDIO_CHANNEL,
+  LISTEN_TTL_MS,
+  type AudioChannelMessage,
+} from "@/core/audio-signal/channel";
 
 interface Capture {
   stream: MediaStream;
   source: MediaStreamAudioSourceNode;
+  /** music-effects tap, BEFORE the gain: turning a tab down doesn't flatten its visualizer */
+  analyser: AnalyserNode;
+  freq: Uint8Array<ArrayBuffer>;
   gain: GainNode;
 }
 
@@ -55,11 +63,29 @@ async function startCapture(tabId: number, streamId: string, gain: number): Prom
     const ctx = context();
     if (ctx.state === "suspended") await ctx.resume();
     const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    // low: analyser smoothing blunts a kick's onset (beat detection needs the
+    // sharp rise); the visualizer smooths on its own side anyway
+    analyser.smoothingTimeConstant = 0.15;
+    // Default maxDecibels (−30) CLIPS bass-heavy music: on a real remix the
+    // sub band sat at the 255 ceiling most of the time (median 0.99), so no
+    // kick could rise above it. −10 leaves headroom (median ~0.80).
+    analyser.maxDecibels = -10;
     const gainNode = ctx.createGain();
     gainNode.gain.value = gain;
-    source.connect(gainNode);
+    // an analyser passes audio through untouched, so it sits in-line
+    source.connect(analyser);
+    analyser.connect(gainNode);
     gainNode.connect(ctx.destination); // ← without this the tab is silent
-    captures.set(tabId, { stream, source, gain: gainNode });
+    captures.set(tabId, {
+      stream,
+      source,
+      analyser,
+      freq: new Uint8Array(analyser.frequencyBinCount),
+      gain: gainNode,
+    });
+    ensureStreaming();
   } catch (err) {
     // never leave the tab captured-but-not-routed
     for (const track of stream.getTracks()) track.stop();
@@ -78,9 +104,58 @@ function stopCapture(tabId: number): void {
   const capture = captures.get(tabId);
   if (!capture) return;
   capture.source.disconnect();
+  capture.analyser.disconnect();
   capture.gain.disconnect();
   for (const track of capture.stream.getTracks()) track.stop();
   captures.delete(tabId);
+}
+
+/* ----------------------------------------- music effects: stream the spectrum */
+
+/**
+ * ~60 frames/s to any New Tab listening on AUDIO_CHANNEL (see
+ * core/audio-signal/channel.ts). setInterval, not rAF: this document is never
+ * visible, so animation frames don't run here. Stops by itself when no tab is
+ * captured or no New Tab has sent a heartbeat lately.
+ */
+const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(AUDIO_CHANNEL) : null;
+let lastListen = 0;
+let streamTimer: ReturnType<typeof setInterval> | null = null;
+
+channel?.addEventListener("message", (e: MessageEvent<AudioChannelMessage>) => {
+  if (e.data?.kind !== "listen") return;
+  lastListen = Date.now();
+  ensureStreaming();
+});
+
+function ensureStreaming(): void {
+  if (streamTimer || !channel) return;
+  // ~60/s: at 30/s fast drum runs (16th notes ≈ 110ms apart) blurred together
+  streamTimer = setInterval(streamFrame, 16);
+}
+
+function streamFrame(): void {
+  if (captures.size === 0 || Date.now() - lastListen > LISTEN_TTL_MS) {
+    clearInterval(streamTimer!);
+    streamTimer = null;
+    return;
+  }
+  // several captured tabs → show whichever is loudest right now
+  let best: { tabId: number; capture: Capture; energy: number } | null = null;
+  for (const [tabId, capture] of captures) {
+    capture.analyser.getByteFrequencyData(capture.freq);
+    let energy = 0;
+    for (let i = 0; i < capture.freq.length; i += 4) energy += capture.freq[i];
+    if (!best || energy > best.energy) best = { tabId, capture, energy };
+  }
+  if (!best || best.energy === 0) return; // silence: let receivers time out and fade
+  const { analyser, freq } = best.capture;
+  channel!.postMessage({
+    kind: "frame",
+    data: freq,
+    binHz: analyser.context.sampleRate / analyser.fftSize,
+    tabId: best.tabId,
+  } satisfies AudioChannelMessage);
 }
 
 browser.runtime.onMessage.addListener((message: MixerMessage, _sender: unknown, sendResponse: (r: unknown) => void) => {

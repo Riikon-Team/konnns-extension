@@ -6,6 +6,7 @@ import "./wallpaper";
 import "./avatar";
 import "./clock-weather";
 import "./search-bar";
+import "./weather";
 import "./most-visited";
 import "./daily-quote";
 import "./bookmark-bar";
@@ -25,3 +26,5 @@ import "./tool-emoji";
 import "./tool-translate";
 import "./tool-english";
 import "./tool-musicbox";
+// audio-reactive effects (visualizer + wallpaper pulse) over core/audio-signal
+import "./music-fx";
