@@ -14,17 +14,4 @@ export const clockWeatherSettingsSchema = defineSchema({
   },
   showSeconds: { type: "toggle", label: "clock.showSeconds", default: false },
   hour24: { type: "toggle", label: "clock.hour24", default: true },
-  showWeather: { type: "toggle", label: "weather.show", default: true },
-  useGeolocation: {
-    type: "toggle",
-    label: "weather.useGeolocation",
-    default: false,
-    showIf: (v) => v.showWeather !== false,
-  },
-  location: {
-    type: "text",
-    label: "weather.location",
-    placeholder: "weather.locationPlaceholder",
-    showIf: (v) => v.showWeather !== false && v.useGeolocation !== true,
-  },
 });

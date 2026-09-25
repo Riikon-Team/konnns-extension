@@ -5,6 +5,23 @@
   overflow: hidden;
   background: var(--theme-gradient, var(--bg));
 }
+/* music bass pulse: scale the WHOLE layer, not the blurred media inside —
+   a transform on this composited layer is GPU-only (no re-blur, no reflow).
+   --music-pulse is 0 when silent, so this is a no-op without music. */
+.wallpaper-layer[data-music-pulse] {
+  transform: scale(calc(1 + var(--music-pulse, 0)));
+  will-change: transform;
+}
+/* …plus a soft light flash on the kick — opacity only, so still compositor-cheap */
+.wallpaper-layer[data-music-pulse]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: #fff;
+  opacity: calc(var(--music-pulse, 0) * 1.6);
+  pointer-events: none;
+}
 .wallpaper-layer__media {
   position: absolute;
   inset: 0;
@@ -28,12 +45,11 @@
   background: color-mix(in srgb, #000 calc(var(--wallpaper-dim) * 100%), transparent);
   pointer-events: none;
 }
-/* parallax: the media layer shifts with the pointer (set via JS transform) */
+/* parallax: the media layer shifts with the pointer / idle sway. The easing
+   is done per frame in JS — no transform transition here, it would restart
+   on every frame and lag. */
 .wallpaper-layer--parallax .wallpaper-layer__media {
   transform: scale(1.08) translate(var(--parallax-x, 0), var(--parallax-y, 0));
-  transition:
-    opacity var(--dur-wallpaper) var(--ease-standard),
-    transform 200ms ease-out;
 }
 
 /* ---- Library manager (settings) ---- */

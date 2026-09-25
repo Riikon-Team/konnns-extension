@@ -90,6 +90,12 @@
     right var(--dur-panel) var(--ease-out),
     width var(--dur-panel) var(--ease-out);
 }
+/* set by RightSidebar while dragging/resizing: the left/width transition above
+   is for dock animations; during a drag it makes the window lag the cursor */
+.tool-window--dragging {
+  transition: none;
+  user-select: none;
+}
 .tool-window--docked {
   /* mirrors the left panel's height/radius settings — a docked tool window
      is functionally a panel pinned to this side */

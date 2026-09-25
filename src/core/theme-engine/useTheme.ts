@@ -57,23 +57,20 @@ export function useThemeEngine(): void {
     document.documentElement.dataset.lowPower = lowPower ? "true" : "false";
   }, [lowPower]);
 
-  // Appearance controls (dim / blur / glass transparency) → CSS variables
+  // Appearance controls (glass transparency, panel shape) → CSS variables.
+  // Wallpaper dim/blur moved to the wallpaper feature, which sets them on its own layer.
   const core = useFeatureValues(CORE_FEATURE_ID);
-  const bgDim = typeof core.bgDim === "number" ? core.bgDim : 35;
-  const bgBlur = typeof core.bgBlur === "number" ? core.bgBlur : 0;
   const panelAlpha = typeof core.panelAlpha === "number" ? core.panelAlpha : 85;
   const panelBlur = typeof core.panelBlur === "number" ? core.panelBlur : 16;
   const panelHeight = typeof core.panelHeight === "number" ? core.panelHeight : 100;
   const panelRadius = typeof core.panelRadius === "number" ? core.panelRadius : 0;
   useEffect(() => {
     const root = document.documentElement.style;
-    root.setProperty("--wallpaper-dim", String(bgDim / 100));
-    root.setProperty("--wallpaper-blur", `${bgBlur}px`);
     root.setProperty("--panel-alpha", String(panelAlpha / 100));
     root.setProperty("--glass-blur", `${panelBlur}px`);
     root.setProperty("--panel-height", `${panelHeight}vh`);
     root.setProperty("--panel-radius", `${panelRadius}px`);
-  }, [bgDim, bgBlur, panelAlpha, panelBlur, panelHeight, panelRadius]);
+  }, [panelAlpha, panelBlur, panelHeight, panelRadius]);
 
   // Overall UI scale / font scale / compact mode
   const uiScale = typeof core.uiScale === "number" ? core.uiScale : 100;

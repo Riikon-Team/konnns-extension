@@ -1,8 +1,15 @@
 /**
- * GitHub via Personal Access Token (docs/phase-3 §2 — recommended for the first
- * version; no OAuth app registration needed). Token is stored in the feature's
- * settings (secret field) and never leaves the browser except to api.github.com.
+ * GitHub, two ways to connect:
+ *  - Personal Access Token (docs/phase-3 §2): everything, via GraphQL — the
+ *    token never leaves the browser except to api.github.com.
+ *  - Just a username: public data only, no sign-in. Profile + repos come from
+ *    the unauthenticated REST API (60 req/h per IP — cached 1h, 2 calls per
+ *    refresh). The contribution calendar has NO public API, so it is read from
+ *    github.com's own calendar page, which needs host access to github.com
+ *    (optional permission, asked on a click). Notifications need a token.
  */
+
+import { hasPermissions, requestPermissions } from "@/core/permissions";
 
 export interface ContribDay {
   date: string;
@@ -109,6 +116,104 @@ export async function fetchProfile(token: string): Promise<GitHubProfile> {
   };
 }
 
+/* ------------------------------------------------ username (public) mode */
+
+export const GITHUB_WEB_ORIGIN = "https://github.com/*";
+
+export function hasContributionsAccess(): Promise<boolean> {
+  return hasPermissions({ origins: [GITHUB_WEB_ORIGIN] });
+}
+
+/** Must be called straight from a click (user gesture). */
+export function requestContributionsAccess(): Promise<boolean> {
+  return requestPermissions({ origins: [GITHUB_WEB_ORIGIN] });
+}
+
+/**
+ * Contribution calendar from github.com/users/<u>/contributions (the fragment
+ * the profile page itself loads). Days are `<td data-date data-level id>`;
+ * counts sit in `<tool-tip for=id>` ("5 contributions on …" / "No contributions …").
+ */
+export async function fetchPublicContributions(
+  username: string,
+): Promise<{ weeks: ContribDay[][]; total: number }> {
+  const res = await fetch(`https://github.com/users/${encodeURIComponent(username)}/contributions`, {
+    credentials: "omit",
+  });
+  if (!res.ok) throw new Error(`github-web ${res.status}`);
+  const doc = new DOMParser().parseFromString(await res.text(), "text/html");
+
+  const days: ContribDay[] = [];
+  doc.querySelectorAll<HTMLElement>("td[data-date]").forEach((td) => {
+    const date = td.dataset.date!;
+    const tip = td.id ? doc.querySelector(`tool-tip[for="${td.id}"]`)?.textContent ?? "" : "";
+    const m = tip.match(/([\d,.]+)\s+contribution/i);
+    const count = m ? Number(m[1].replace(/[,.]/g, "")) : 0;
+    const lvl = Number(td.dataset.level ?? NaN);
+    days.push({ date, count, level: (lvl >= 0 && lvl <= 4 ? lvl : levelFor(count)) as ContribDay["level"] });
+  });
+  if (days.length === 0) throw new Error("github-web no calendar");
+
+  // columns = weeks starting on Sunday, like the GraphQL calendar
+  days.sort((a, b) => a.date.localeCompare(b.date));
+  const weeks: ContribDay[][] = [];
+  for (const d of days) {
+    if (weeks.length === 0 || new Date(`${d.date}T00:00:00Z`).getUTCDay() === 0) weeks.push([]);
+    weeks[weeks.length - 1].push(d);
+  }
+  return { weeks, total: days.reduce((s, d) => s + d.count, 0) };
+}
+
+/** Public profile + recent repos (+ calendar when github.com access is granted). */
+export async function fetchPublicProfile(username: string): Promise<GitHubProfile> {
+  const u = encodeURIComponent(username);
+  const headers = { Accept: "application/vnd.github+json" };
+  const [userRes, reposRes] = await Promise.all([
+    fetch(`https://api.github.com/users/${u}`, { headers }),
+    fetch(`https://api.github.com/users/${u}/repos?sort=pushed&per_page=20`, { headers }),
+  ]);
+  if (userRes.status === 404) throw new Error("github-user-not-found");
+  if (userRes.status === 403) throw new Error("github-rate-limited");
+  if (!userRes.ok) throw new Error(`github ${userRes.status}`);
+  const user = await userRes.json();
+  const repos: unknown[] = reposRes.ok ? await reposRes.json() : [];
+
+  let calendar: { weeks: ContribDay[][]; total: number } = { weeks: [], total: -1 };
+  if (await hasContributionsAccess()) {
+    calendar = await fetchPublicContributions(username).catch(() => calendar);
+  }
+
+  return {
+    login: user.login,
+    name: user.name ?? null,
+    avatarUrl: user.avatar_url,
+    bio: user.bio ?? null,
+    followers: user.followers ?? 0,
+    following: user.following ?? 0,
+    repos: user.public_repos ?? 0,
+    totalContributions: calendar.total,
+    weeks: calendar.weeks,
+    recentRepos: (Array.isArray(repos) ? repos : []).map((r) => {
+      const repo = r as {
+        name: string;
+        description: string | null;
+        html_url: string;
+        stargazers_count: number;
+        language: string | null;
+        pushed_at: string;
+      };
+      return {
+        name: repo.name,
+        description: repo.description,
+        url: repo.html_url,
+        stars: repo.stargazers_count,
+        language: repo.language,
+        pushedAt: new Date(repo.pushed_at).getTime(),
+      };
+    }),
+  };
+}
+
 export interface GitHubNotification {
   id: string;
   title: string;
@@ -136,9 +241,12 @@ export async function fetchTrending(
   const days = window === "day" ? 1 : window === "week" ? 7 : 30;
   const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString().slice(0, 10);
   const q = encodeURIComponent(`created:>=${since}`);
+  // search works unauthenticated too (lower rate limit) — username mode uses it
+  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
+  if (token) headers.Authorization = `bearer ${token}`;
   const res = await fetch(
     `https://api.github.com/search/repositories?q=${q}&sort=stars&order=desc&per_page=6`,
-    { headers: { Authorization: `bearer ${token}`, Accept: "application/vnd.github+json" } },
+    { headers },
   );
   if (!res.ok) return [];
   const json = await res.json();

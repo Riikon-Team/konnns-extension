@@ -1,0 +1,138 @@
+/* Audio Mixer popup widget — mirrors popup.css's .popup__row (the section
+   frame is the shared <Collapsible>). */
+
+.amx__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+}
+
+.amx__row {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  transition:
+    background var(--dur-hover) ease-out,
+    border-color var(--dur-hover) ease-out;
+}
+
+.amx__row:hover {
+  border-color: var(--border);
+  background: var(--glass-bg-strong);
+}
+
+.amx__row-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  padding-right: var(--space-1);
+}
+
+.amx__row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  min-height: 42px;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+/* same icon box as the tool rows */
+.amx__favicon,
+.amx__favicon-fallback {
+  flex: none;
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.amx__favicon-fallback {
+  color: var(--text-muted);
+}
+
+.amx__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.amx__mute--on {
+  color: var(--accent);
+}
+
+/* ---------- per-tab volume (active tab only) ---------- */
+.amx__volume {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2) var(--space-3);
+}
+
+/* not captured yet: the start button sits in the title line (MixerTabRow);
+   its error wraps onto a line of its own */
+.amx__start-error {
+  flex-basis: 100%;
+  padding: 0 var(--space-3) var(--space-2);
+  font-size: 10.5px;
+  color: var(--danger, #e5484d);
+}
+
+.amx__row-top .ui-iconbtn {
+  width: 30px;
+  height: 30px;
+}
+
+.amx__volume-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.amx__volume-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  min-width: 4ch;
+  text-align: right;
+}
+
+.amx__volume-error {
+  font-size: 10px;
+  color: var(--danger, #e5484d);
+}
+.amx__grant {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+
+.amx__grant:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}

@@ -1,12 +1,8 @@
 import { defineSchema } from "@/core/settings-engine/schema";
 
+// the connection (username / personal token) is the GitHubAccount block above
+// this form — see settingsExtra in index.tsx
 export const githubSettingsSchema = defineSchema({
-  token: {
-    type: "text",
-    label: "github.token",
-    description: "github.tokenDesc",
-    secret: true,
-  },
   showTrending: {
     type: "toggle",
     label: "github.showTrending",

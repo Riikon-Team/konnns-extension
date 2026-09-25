@@ -1,4 +1,4 @@
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -105,25 +105,43 @@ function Panel({ feature, width }: { feature: FeatureDefinition; width: number }
   const Icon = feature.icon;
   const Content = feature.component;
 
-  // drag the right edge → updates the same setting as the slider (single source)
+  const panelRef = useRef<HTMLElement>(null);
+
+  // drag the right edge → updates the same setting as the slider (single source).
+  // The width is set on the element per frame and saved ONCE on release —
+  // setValue per pointermove re-rendered the panel and wrote IndexedDB every frame.
   const startResize = (e: React.PointerEvent) => {
+    const el = panelRef.current;
+    if (!el) return;
     e.preventDefault();
     const startX = e.clientX;
     const start = width;
+    let w = start;
+    let raf = 0;
     const move = (ev: PointerEvent) => {
-      const w = Math.max(260, Math.min(640, start + (ev.clientX - startX)));
-      setValue(CORE_FEATURE_ID, "sidebarWidth", w);
+      w = Math.max(260, Math.min(640, start + (ev.clientX - startX)));
+      if (!raf) {
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          el.style.width = `${w}px`;
+        });
+      }
     };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      cancelAnimationFrame(raf);
+      if (w !== start) setValue(CORE_FEATURE_ID, "sidebarWidth", w);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
 
   return (
     <motion.aside
+      ref={panelRef}
       className="left-panel"
       style={{ width }}
       initial={{ x: -40, opacity: 0 }}

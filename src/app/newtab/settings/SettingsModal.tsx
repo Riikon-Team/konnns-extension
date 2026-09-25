@@ -12,6 +12,7 @@ import { exportBackup, importBackup } from "@/core/storage/backup";
 import { estimateStorage } from "@/core/storage/db";
 import { setLanguage } from "@/core/i18n";
 import { emit, on } from "@/core/event-bus";
+import { sendToBackground } from "@/core/messaging";
 import { Button, Field, Modal, Toggle } from "@/shared/ui";
 import { NotificationSettings } from "@/core/notification-engine/NotificationSettings";
 import { SoundSettings } from "@/core/sound/SoundSettings";
@@ -63,6 +64,16 @@ function GeneralPanel() {
 
       <div className="settings-section">
         <h3 className="settings-section__title">{t("settings.backup")}</h3>
+        <p className="ui-field__desc">
+          {t("settings.backupScope")}{" "}
+          <button
+            type="button"
+            className="settings-link"
+            onClick={() => void sendToBackground({ type: "site:open", route: "/settings" })}
+          >
+            {t("settings.backupAppsLink")}
+          </button>
+        </p>
         <div className="settings-section__row">
           <Button onClick={() => void exportBackup()}>
             <Download size={15} /> {t("settings.exportBackup")}
@@ -81,8 +92,11 @@ function GeneralPanel() {
               if (!f) return;
               if (!window.confirm(t("settings.importConfirm"))) return;
               const res = await importBackup(f);
-              if (res.ok) setImportMsg(t("settings.importDone"));
-              else if (res.error === "newer-version") setImportMsg(t("settings.importNewer"));
+              if (res.ok) {
+                // stores in memory still hold the old data — start fresh from the restored DB
+                setImportMsg(t("settings.importDone"));
+                window.setTimeout(() => window.location.reload(), 800);
+              } else if (res.error === "newer-version") setImportMsg(t("settings.importNewer"));
               else setImportMsg(t("settings.importInvalid"));
             }}
           />
@@ -122,10 +136,15 @@ function FeaturePanel({ featureId }: { featureId: string }) {
       <Field label={t("settings.featureEnabled")} inline>
         <Toggle checked={enabled} onChange={(v) => setEnabled(featureId, v)} />
       </Field>
+      {enabled && feature.settingsExtra && feature.settingsExtraPosition === "top" && (
+        <div className="settings-section settings-section--top">
+          <feature.settingsExtra />
+        </div>
+      )}
       {enabled && feature.settingsSchema && (
         <SettingsForm featureId={featureId} schema={feature.settingsSchema} />
       )}
-      {enabled && feature.settingsExtra && (
+      {enabled && feature.settingsExtra && feature.settingsExtraPosition !== "top" && (
         <div className="settings-section">
           <feature.settingsExtra />
         </div>
@@ -137,13 +156,13 @@ function FeaturePanel({ featureId }: { featureId: string }) {
 export function SettingsModal() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<string>(CONTRIBUTE_ID);
+  const [category, setCategory] = useState<string>(CORE_FEATURE_ID);
   const features = getFeatures();
 
   useEffect(
     () =>
       on("settings:open", (payload) => {
-        setCategory(payload?.featureId ?? CONTRIBUTE_ID);
+        setCategory(payload?.featureId ?? CORE_FEATURE_ID);
         setOpen(true);
       }),
     [],
@@ -163,18 +182,17 @@ export function SettingsModal() {
         </button>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={t("settings.title")} width="min(92vw, 880px)">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t("settings.title")}
+        width="min(92vw, 880px)"
+        peekLabel={t("settings.peek")}
+      >
         <div className="settings-layout">
           <nav className="settings-nav">
             {/* System group */}
             <div className="settings-nav__group">{t("settings.groupSystem")}</div>
-            <button
-              className={`settings-nav__item ${category === CONTRIBUTE_ID ? "settings-nav__item--active" : ""}`}
-              onClick={() => setCategory(CONTRIBUTE_ID)}
-            >
-              <HeartHandshake size={16} />
-              {t("settings.contribute")}
-            </button>
             <button
               className={`settings-nav__item ${category === CORE_FEATURE_ID ? "settings-nav__item--active" : ""}`}
               onClick={() => setCategory(CORE_FEATURE_ID)}
@@ -219,6 +237,16 @@ export function SettingsModal() {
                 </div>
               );
             })}
+
+            {/* About & Contribute at the bottom */}
+            <div className="settings-nav__group">{t("settings.groupAbout", "Thông tin")}</div>
+            <button
+              className={`settings-nav__item ${category === CONTRIBUTE_ID ? "settings-nav__item--active" : ""}`}
+              onClick={() => setCategory(CONTRIBUTE_ID)}
+            >
+              <HeartHandshake size={16} />
+              {t("settings.contribute")}
+            </button>
           </nav>
           <div className="settings-content">
             {category === CONTRIBUTE_ID ? (

@@ -1,3 +1,83 @@
+/* ---------- bubble (bottom-left, see NewsBubble.tsx) ---------- */
+.news-bubble {
+  position: fixed;
+  left: var(--space-5);
+  bottom: var(--space-5);
+  z-index: 22;
+  width: min(300px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-bg-strong, var(--surface-elevated));
+  backdrop-filter: blur(var(--glass-blur, 14px));
+  box-shadow: var(--shadow-soft);
+  transition:
+    opacity var(--dur-panel) var(--ease-out),
+    transform var(--dur-panel) var(--ease-out);
+}
+/* a left panel is open — slide away instead of sitting under/over it */
+.news-bubble--hidden {
+  opacity: 0;
+  transform: translateX(-16px);
+  pointer-events: none;
+}
+.news-bubble__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 4px 6px;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.news-bubble__head span {
+  flex: 1;
+}
+.news-bubble__close {
+  display: inline-flex;
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.news-bubble__close:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+.news-bubble__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  text-decoration: none;
+  transition: background-color var(--dur-hover) ease-out;
+}
+.news-bubble__item:hover {
+  background: var(--surface);
+}
+.news-bubble__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.news-bubble__source {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .news__perm {
   display: flex;
   flex-direction: column;

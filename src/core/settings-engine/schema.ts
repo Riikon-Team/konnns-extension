@@ -40,12 +40,23 @@ export interface SelectField extends BaseField {
   default?: string;
 }
 
+/** Several values at once, rendered as checkbox chips. Value is a string[]. */
+export interface MultiSelectField extends BaseField {
+  type: "multiselect";
+  options: Array<{ value: string; label: string; icon?: string }>;
+  default?: string[];
+  /** refuse to uncheck below this many (default 1) */
+  min?: number;
+}
+
 export interface SliderField extends BaseField {
   type: "slider";
   default?: number;
   min: number;
   max: number;
   step?: number;
+  /** apply only when the drag ends — for values costly to apply live */
+  commitOnRelease?: boolean;
 }
 
 export interface ColorField extends BaseField {
@@ -58,6 +69,7 @@ export type FieldDef =
   | NumberField
   | ToggleField
   | SelectField
+  | MultiSelectField
   | SliderField
   | ColorField;
 

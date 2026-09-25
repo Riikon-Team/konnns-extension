@@ -1,4 +1,5 @@
 import { defineSchema } from "@/core/settings-engine/schema";
+import { DEFAULT_TOPIC_IDS, DEFAULT_WALLHAVEN_KEEP, WALLHAVEN_TOPICS } from "./wallhaven";
 
 export const wallpaperSettingsSchema = defineSchema({
   mode: {
@@ -36,13 +37,104 @@ export const wallpaperSettingsSchema = defineSchema({
     label: "wallpaper.randomMode",
     description: "wallpaper.randomModeDesc",
     options: [
+      { value: "wallhaven", label: "wallpaper.randomWallhaven" },
       { value: "off", label: "wallpaper.randomOff" },
       { value: "images", label: "wallpaper.randomImages" },
       { value: "videos", label: "wallpaper.randomVideos" },
       { value: "all", label: "wallpaper.randomAll" },
     ],
-    default: "off",
+    default: "wallhaven",
     showIf: (v) => v.mode !== "slideshow",
+  },
+  wallhavenTopics: {
+    type: "multiselect",
+    label: "wallpaper.wallhavenTopics",
+    description: "wallpaper.wallhavenTopicsDesc",
+    options: WALLHAVEN_TOPICS.map((tp) => ({
+      value: tp.id,
+      label: `wallpaper.topics.${tp.id}`,
+      icon: tp.icon,
+    })),
+    default: DEFAULT_TOPIC_IDS,
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  wallhavenRefresh: {
+    type: "select",
+    label: "wallpaper.wallhavenRefresh",
+    description: "wallpaper.wallhavenRefreshDesc",
+    options: [
+      { value: "0", label: "wallpaper.refreshEveryTab" },
+      { value: "30", label: "wallpaper.refresh30m" },
+      { value: "60", label: "wallpaper.refresh1h" },
+      { value: "360", label: "wallpaper.refresh6h" },
+      { value: "1440", label: "wallpaper.refresh1d" },
+    ],
+    default: "60",
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  wallhavenKeep: {
+    type: "slider",
+    label: "wallpaper.wallhavenKeep",
+    description: "wallpaper.wallhavenKeepDesc",
+    min: 1,
+    max: 20,
+    step: 1,
+    default: DEFAULT_WALLHAVEN_KEEP,
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  wallhavenResolution: {
+    type: "select",
+    label: "wallpaper.wallhavenMinRes",
+    options: [
+      { value: "2560x1440", label: "2K QHD (2560x1440+)" },
+      { value: "3840x2160", label: "4K UHD (3840x2160+)" },
+    ],
+    default: "2560x1440",
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  wallhavenCustomQuery: {
+    type: "text",
+    label: "wallpaper.wallhavenCustomQuery",
+    description: "wallpaper.wallhavenCustomQueryDesc",
+    default: "",
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  // moved here from Appearance (core) — only the wallpaper layer uses them
+  bgDim: {
+    type: "slider",
+    label: "wallpaper.bgDim",
+    description: "wallpaper.bgDimDesc",
+    min: 0,
+    max: 80,
+    step: 5,
+    default: 35,
+  },
+  bgBlur: {
+    type: "slider",
+    label: "wallpaper.bgBlur",
+    min: 0,
+    max: 24,
+    step: 1,
+    default: 0,
+  },
+  parallax: {
+    type: "toggle",
+    label: "wallpaper.parallax",
+    description: "wallpaper.parallaxDesc",
+    default: false,
+  },
+  parallaxIdle: {
+    type: "toggle",
+    label: "wallpaper.parallaxIdle",
+    description: "wallpaper.parallaxIdleDesc",
+    default: false,
+    showIf: (v) => v.parallax === true,
+  },
+  compress: {
+    type: "toggle",
+    label: "wallpaper.compress",
+    description: "wallpaper.compressDesc",
+    default: true,
   },
   videoSound: { type: "toggle", label: "wallpaper.videoSound", default: false },
   videoVolume: {

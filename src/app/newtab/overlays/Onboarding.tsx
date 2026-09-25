@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Sparkles, Upload } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { db } from "@/core/storage/db";
 import { on } from "@/core/event-bus";
@@ -9,14 +9,13 @@ import {
   useFeatureValues,
   useSettingsStore,
 } from "@/core/settings-engine/settingsStore";
-import { getFeatures } from "@/core/feature-registry";
-import { useWallpaperStore } from "@/features/newtab/wallpaper/store";
-import { WALLPAPER_FEATURE_ID } from "@/features/newtab/wallpaper";
 import { BOOKMARK_FEATURE_ID } from "@/features/newtab/bookmark-bar";
 import { requestBookmarkPermission } from "@/features/newtab/bookmark-bar/bookmarks-api";
-import { CLOCK_FEATURE_ID } from "@/features/newtab/clock-weather";
-import { Button, Card, Segmented, TextInput, Toggle } from "@/shared/ui";
+import { WEATHER_FEATURE_ID } from "@/features/newtab/weather";
+import { Button, Card, Segmented, Slider, TextInput, Toggle } from "@/shared/ui";
 import { ThemePicker } from "../settings/ThemePicker";
+import { WallpaperStep } from "./WallpaperStep";
+import { FeaturesStep } from "./FeaturesStep";
 import "./onboarding.css";
 
 /**
@@ -27,13 +26,6 @@ import "./onboarding.css";
 
 // welcome, theme, mode, wallpaper, weather, bookmarks, features, done
 const TOTAL_STEPS = 8;
-
-/** Panels/tools the user can opt into at step 7 (auto-sinh from the registry). */
-function extensionFeatures() {
-  return getFeatures().filter(
-    (f) => f.zone === "left-sidebar" || f.zone === "right-sidebar",
-  );
-}
 
 export function Onboarding() {
   const { t } = useTranslation();
@@ -146,11 +138,9 @@ function StepContent({ step }: { step: number }) {
   const setValue = useSettingsStore((s) => s.setValue);
   const setEnabled = useSettingsStore((s) => s.setEnabled);
   const coreValues = useFeatureValues(CORE_FEATURE_ID);
-  const clockValues = useFeatureValues(CLOCK_FEATURE_ID);
+  const weatherValues = useFeatureValues(WEATHER_FEATURE_ID);
+  const weatherEnabled = useSettingsStore((s) => s.enabled[WEATHER_FEATURE_ID] ?? true);
   const bookmarkEnabled = useSettingsStore((s) => s.enabled[BOOKMARK_FEATURE_ID] ?? true);
-  const enabledMap = useSettingsStore((s) => s.enabled);
-  const addImageFile = useWallpaperStore((s) => s.addImageFile);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   switch (step) {
     case 0:
@@ -184,57 +174,57 @@ function StepContent({ step }: { step: number }) {
               { value: "dark", label: t("settings.colorModeDark") },
             ]}
           />
+          <div className="onboarding-scale">
+            <div className="onboarding-scale__head">
+              <span className="ui-field__label">{t("settings.uiScale")}</span>
+              <span className="ui-field__desc">{t("onboarding.scaleHint")}</span>
+            </div>
+            <Slider
+              value={typeof coreValues.uiScale === "number" ? coreValues.uiScale : 100}
+              onChange={(v) => setValue(CORE_FEATURE_ID, "uiScale", v)}
+              min={80}
+              max={130}
+              step={5}
+              commitOnRelease
+            />
+          </div>
         </>
       );
     case 3:
-      return (
-        <>
-          <h2 className="onboarding-step__title">{t("onboarding.stepWallpaper")}</h2>
-          <p className="onboarding-step__desc">{t("onboarding.stepWallpaperDesc")}</p>
-          <div className="onboarding-gradient-options">
-            <Button onClick={() => setValue(WALLPAPER_FEATURE_ID, "activeId", "")}>
-              {t("onboarding.stepWallpaperGradient")}
-            </Button>
-            <Button onClick={() => fileRef.current?.click()}>
-              <Upload size={15} /> {t("wallpaper.upload")}
-            </Button>
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (!f) return;
-              try {
-                const id = await addImageFile(f);
-                setValue(WALLPAPER_FEATURE_ID, "activeId", id);
-              } catch {
-                /* size errors surface later in Settings; keep the wizard flowing */
-              }
-            }}
-          />
-        </>
-      );
+      return <WallpaperStep />;
     case 4:
       return (
         <>
           <h2 className="onboarding-step__title">{t("onboarding.stepWeather")}</h2>
           <p className="onboarding-step__desc">{t("onboarding.stepWeatherDesc")}</p>
-          <TextInput
-            placeholder={t("weather.locationPlaceholder")}
-            value={(clockValues.location as string) ?? ""}
-            onChange={(e) => setValue(CLOCK_FEATURE_ID, "location", e.target.value)}
+          <Segmented
+            value={weatherEnabled ? ((weatherValues.display as string) ?? "below") : "off"}
+            onChange={(v) => {
+              setEnabled(WEATHER_FEATURE_ID, v !== "off");
+              if (v !== "off") setValue(WEATHER_FEATURE_ID, "display", v);
+            }}
+            options={[
+              { value: "below", label: t("weather.displayBelow") },
+              { value: "bubble", label: t("weather.displayBubble") },
+              { value: "off", label: t("weather.displayOff") },
+            ]}
           />
-          <div className="ui-field__row">
-            <span className="ui-field__label">{t("weather.useGeolocation")}</span>
-            <Toggle
-              checked={clockValues.useGeolocation === true}
-              onChange={(v) => setValue(CLOCK_FEATURE_ID, "useGeolocation", v)}
-            />
-          </div>
+          {weatherEnabled && (
+            <>
+              <TextInput
+                placeholder={t("weather.locationPlaceholder")}
+                value={(weatherValues.location as string) ?? ""}
+                onChange={(e) => setValue(WEATHER_FEATURE_ID, "location", e.target.value)}
+              />
+              <div className="ui-field__row">
+                <span className="ui-field__label">{t("weather.useGeolocation")}</span>
+                <Toggle
+                  checked={weatherValues.useGeolocation === true}
+                  onChange={(v) => setValue(WEATHER_FEATURE_ID, "useGeolocation", v)}
+                />
+              </div>
+            </>
+          )}
         </>
       );
     case 5:
@@ -257,26 +247,7 @@ function StepContent({ step }: { step: number }) {
         </>
       );
     case 6:
-      return (
-        <>
-          <h2 className="onboarding-step__title">{t("onboarding.stepFeatures")}</h2>
-          <p className="onboarding-step__desc">{t("onboarding.stepFeaturesDesc")}</p>
-          <div className="onboarding-features">
-            {extensionFeatures().map((f) => {
-              const Icon = f.icon;
-              const enabled = enabledMap[f.id] ?? f.defaultEnabled;
-              return (
-                <div className="onboarding-feature" key={f.id}>
-                  <span className="onboarding-feature__name">
-                    <Icon size={16} /> {t(f.nameKey)}
-                  </span>
-                  <Toggle checked={enabled} onChange={(v) => setEnabled(f.id, v)} />
-                </div>
-              );
-            })}
-          </div>
-        </>
-      );
+      return <FeaturesStep />;
     default:
       return (
         <>

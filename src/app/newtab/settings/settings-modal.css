@@ -118,6 +118,26 @@
   color: var(--text);
 }
 
+/* a settingsExtra placed above the form: divider goes below it instead */
+.settings-section--top {
+  margin-top: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding-top: 0;
+  padding-bottom: var(--space-4);
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .settings-section__row {
   display: flex;
   flex-wrap: wrap;
@@ -147,10 +167,15 @@
   width: 52px;
   height: 52px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--surface-elevated));
-  color: var(--accent-contrast, #fff);
   flex-shrink: 0;
   box-shadow: var(--shadow-soft);
+}
+
+.contribute-hero__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .contribute-hero__info {

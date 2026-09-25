@@ -1,32 +1,29 @@
-import React, { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { RefreshCw, X } from "lucide-react";
+import React, { useRef } from "react";
+import { RefreshCw } from "lucide-react";
 import "./ui.css";
 
 /**
  * Shared UI kit — the single reusable component set for the whole project.
  * All colors/spacing/motion come from design tokens; no feature builds its own
- * buttons/inputs/modals (docs/00 §2.4 "Themeable từ gốc").
+ * buttons/inputs/modals (docs/00 §2.4 "Themeable từ gốc"). Larger pieces live
+ * in their own files and are re-exported here, so imports stay "@/shared/ui".
  */
+export { IconButton } from "./IconButton";
+export { Collapsible } from "./Collapsible";
+export { Modal } from "./Modal";
 
 /* ---------- Button ---------- */
 type ButtonVariant = "primary" | "subtle" | "ghost" | "danger";
 
-export function Button({
-  variant = "subtle",
-  size,
-  className = "",
-  ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
-  size?: "sm";
-}) {
+export const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: "sm" }
+>(function Button({ variant = "subtle", size, className = "", ...rest }, ref) {
   const cls = ["ui-btn", `ui-btn--${variant}`, size === "sm" && "ui-btn--sm", className]
     .filter(Boolean)
     .join(" ");
-  return <button type="button" className={cls} {...rest} />;
-}
+  return <button ref={ref} type="button" className={cls} {...rest} />;
+});
 
 /* ---------- ReloadButton (force refresh, bypasses cache) ---------- */
 export function ReloadButton({
@@ -50,23 +47,6 @@ export function ReloadButton({
     >
       <RefreshCw size={14} />
     </button>
-  );
-}
-
-/* ---------- IconButton ---------- */
-export function IconButton({
-  label,
-  className = "",
-  ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  return (
-    <button
-      type="button"
-      className={`ui-iconbtn ${className}`}
-      aria-label={label}
-      title={label}
-      {...rest}
-    />
   );
 }
 
@@ -168,27 +148,55 @@ export function Slider({
   min,
   max,
   step = 1,
+  commitOnRelease = false,
 }: {
   value: number;
   onChange: (value: number) => void;
   min: number;
   max: number;
   step?: number;
+  /**
+   * Only call onChange when the drag ends (pointer up / key up / blur).
+   * For values that are expensive to apply live — e.g. UI scale re-lays out
+   * the whole page on every step.
+   */
+  commitOnRelease?: boolean;
 }) {
+  const [draft, setDraft] = React.useState<number | null>(null);
+  // a ref too: pointerup can fire before React has re-rendered the last input
+  const draftRef = useRef<number | null>(null);
+  const shown = draft ?? value;
+
+  const commit = () => {
+    const next = draftRef.current;
+    if (next === null) return;
+    draftRef.current = null;
+    setDraft(null);
+    if (next !== value) onChange(next);
+  };
+
   return (
     <div className="ui-slider__row">
       <input
         type="range"
         className="ui-slider"
-        value={value}
+        value={shown}
         min={min}
         max={max}
         step={step}
-        onChange={(e) => onChange(Number(e.target.value))}
-        title={`${value}`}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (!commitOnRelease) return onChange(v);
+          draftRef.current = v;
+          setDraft(v);
+        }}
+        onPointerUp={commitOnRelease ? commit : undefined}
+        onKeyUp={commitOnRelease ? commit : undefined}
+        onBlur={commitOnRelease ? commit : undefined}
+        title={`${shown}`}
       />
       <div className="ui-slider__value">
-        {value}
+        {shown}
       </div>
     </div>
   );
@@ -230,8 +238,8 @@ export function Field({
   inline = false,
   children,
 }: {
-  label: string;
-  description?: string;
+  label: React.ReactNode;
+  description?: React.ReactNode;
   error?: string;
   inline?: boolean;
   children: React.ReactNode;
@@ -283,72 +291,5 @@ export function Skeleton({
       style={{ width, height, borderRadius: radius }}
       aria-hidden
     />
-  );
-}
-
-/* ---------- Modal ---------- */
-export function Modal({
-  open,
-  onClose,
-  title,
-  width,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title?: string;
-  width?: number | string;
-  children: React.ReactNode;
-}) {
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="ui-modal-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
-        >
-          <motion.div
-            className="ui-modal"
-            style={{ width }}
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {title && (
-              <div className="ui-modal__header">
-                <span className="ui-modal__title">{title}</span>
-                <IconButton label="Close" onClick={onClose}>
-                  <X size={18} />
-                </IconButton>
-              </div>
-            )}
-            <div className="ui-modal__body">{children}</div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body,
   );
 }

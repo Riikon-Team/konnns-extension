@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Image as ImageIcon } from "lucide-react";
 import { registerFeature } from "@/core/feature-registry";
-import { CORE_FEATURE_ID, useFeatureValues } from "@/core/settings-engine/settingsStore";
+import { CORE_FEATURE_ID, useFeatureValues, useSettingsStore } from "@/core/settings-engine/settingsStore";
+import { WALLPAPER_FEATURE_ID } from "./id";
 import { getWallpaperUrl, useWallpaperStore } from "./store";
 import { WallpaperManager } from "./WallpaperManager";
 import { wallpaperSettingsSchema } from "./settings.schema";
+import { wallhavenOptionsFrom } from "./wallhaven";
+import { useWallhavenRandom } from "./useWallhavenRandom";
+import { useParallax } from "./useParallax";
+import "./migrations";
 import "./wallpaper.css";
 
-export const WALLPAPER_FEATURE_ID = "wallpaper";
+export { WALLPAPER_FEATURE_ID };
 
 interface Layer {
   key: string;
@@ -55,24 +60,45 @@ function WallpaperLayer() {
     return () => window.clearInterval(id);
   }, [slideshow, slideKey, slideInterval, slideOrder]);
 
-  // Random-on-open: pick a random wallpaper from the library each new tab
+  // Random-on-open: pick a random wallpaper from the library or Wallhaven each new tab
   const rawRandomMode = values.randomMode;
-  const randomModeKind: "off" | "images" | "videos" | "all" =
-    rawRandomMode === true
-      ? "all"
-      : rawRandomMode === false
+  const randomModeKind: "wallhaven" | "off" | "images" | "videos" | "all" =
+    rawRandomMode === "wallhaven"
+      ? "wallhaven"
+      : rawRandomMode === "off"
         ? "off"
-        : ((rawRandomMode as "off" | "images" | "videos" | "all") ?? "off");
-  const randomMode = randomModeKind !== "off" && !slideshow;
+        : rawRandomMode === "images" || rawRandomMode === "videos" || rawRandomMode === "all"
+          ? rawRandomMode
+          : rawRandomMode === false
+            ? "off"
+            : rawRandomMode === true
+              ? "all"
+              : "wallhaven";
+
+  const hydrated = useSettingsStore((s) => s.hydrated);
+  const { signature: wallhavenSig, keep: wallhavenKeep } = wallhavenOptionsFrom(values);
+
+  const isLocalRandom =
+    (randomModeKind === "images" || randomModeKind === "videos" || randomModeKind === "all") &&
+    !slideshow;
+
   const items = useWallpaperStore((s) => s.items);
   const itemsLoaded = useWallpaperStore((s) => s.loaded);
   const loadItems = useWallpaperStore((s) => s.load);
   const [randomId, setRandomId] = useState<string | null>(null);
+  const wallhavenActiveId = useWallhavenRandom({
+    enabled: !slideshow && randomModeKind === "wallhaven",
+    hydrated,
+    signature: wallhavenSig,
+    keep: wallhavenKeep,
+  });
+
   useEffect(() => {
-    if (randomMode && !itemsLoaded) void loadItems();
-  }, [randomMode, itemsLoaded, loadItems]);
+    if (isLocalRandom && !itemsLoaded) void loadItems();
+  }, [isLocalRandom, itemsLoaded, loadItems]);
+
   useEffect(() => {
-    if (randomMode && itemsLoaded && items.length > 0) {
+    if (isLocalRandom && itemsLoaded && items.length > 0) {
       const pool =
         randomModeKind === "all"
           ? items
@@ -81,7 +107,7 @@ function WallpaperLayer() {
     }
     // pick once when random mode turns on / library first loads
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [randomMode, randomModeKind, itemsLoaded]);
+  }, [isLocalRandom, randomModeKind, itemsLoaded]);
 
   const slideActiveId =
     slideshow && slideItems.length > 0
@@ -89,31 +115,24 @@ function WallpaperLayer() {
       : null;
   const activeId =
     slideActiveId ??
-    (randomMode && randomId ? randomId : ((values.activeId as string) ?? ""));
+    (randomModeKind === "wallhaven"
+      ? (wallhavenActiveId ??
+        (values.wallhavenLastId as string | undefined) ??
+        (values.activeId as string) ??
+        "")
+      : isLocalRandom && randomId
+        ? randomId
+        : ((values.activeId as string) ?? ""));
+  // "fit to screen" on → the downscaled copy; off → the original, when one was kept
+  const compress = values.compress !== false;
   const lowPower =
     coreValues.lowPower === true ||
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const parallaxOn = coreValues.parallax === true && !lowPower;
+  const parallaxOn = values.parallax === true && !lowPower;
+  const idleSway = parallaxOn && values.parallaxIdle === true;
   const layerRef = useRef<HTMLDivElement>(null);
-
-  // parallax: shift the wallpaper slightly opposite the pointer (docs request, optional)
-  useEffect(() => {
-    if (!parallaxOn) {
-      layerRef.current?.style.removeProperty("--parallax-x");
-      layerRef.current?.style.removeProperty("--parallax-y");
-      return;
-    }
-    const onMove = (e: MouseEvent) => {
-      const cx = (e.clientX / window.innerWidth - 0.5) * 2;
-      const cy = (e.clientY / window.innerHeight - 0.5) * 2;
-      const max = 14;
-      layerRef.current?.style.setProperty("--parallax-x", `${(-cx * max).toFixed(1)}px`);
-      layerRef.current?.style.setProperty("--parallax-y", `${(-cy * max).toFixed(1)}px`);
-    };
-    window.addEventListener("mousemove", onMove);
-    return () => window.removeEventListener("mousemove", onMove);
-  }, [parallaxOn]);
+  useParallax(layerRef, parallaxOn, idleSway);
 
   const videoSound = values.videoSound === true;
   const videoVolume = typeof values.videoVolume === "number" ? values.videoVolume : 50;
@@ -179,7 +198,7 @@ function WallpaperLayer() {
     }
 
     void (async () => {
-      const res = await getWallpaperUrl(activeId);
+      const res = await getWallpaperUrl(activeId, { original: !compress });
       if (!res || cancelled) return;
 
       // low-power mode: never play video wallpapers, keep gradient instead
@@ -247,7 +266,7 @@ function WallpaperLayer() {
     return () => {
       cancelled = true;
     };
-  }, [activeId, lowPower, touch]);
+  }, [activeId, lowPower, touch, compress]);
 
   useEffect(() => {
     const urls = urlsRef.current;
@@ -260,6 +279,15 @@ function WallpaperLayer() {
     <div
       ref={layerRef}
       className={`wallpaper-layer ${parallaxOn ? "wallpaper-layer--parallax" : ""}`}
+      // dim/blur live on the layer itself (they used to be global, set by the theme engine)
+      style={
+        {
+          "--wallpaper-dim": String((typeof values.bgDim === "number" ? values.bgDim : 35) / 100),
+          "--wallpaper-blur": `${typeof values.bgBlur === "number" ? values.bgBlur : 0}px`,
+        } as React.CSSProperties
+      }
+      // opt in to the music bass pulse (music-fx writes --music-pulse here)
+      data-music-pulse=""
       aria-hidden
     >
       {layers.map((l) =>
