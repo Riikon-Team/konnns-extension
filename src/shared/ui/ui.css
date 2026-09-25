@@ -754,7 +754,6 @@ html[data-low-power="true"] .ui-datepicker {
 }
 
 .ui-modal__body {
-  /* overflow: auto; */
   flex: 1;
 }
 

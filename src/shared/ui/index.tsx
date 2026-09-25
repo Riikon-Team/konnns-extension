@@ -1,14 +1,16 @@
-import React, { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, Eye, RefreshCw, X, type LucideIcon } from "lucide-react";
+import React, { useRef } from "react";
+import { RefreshCw } from "lucide-react";
 import "./ui.css";
 
 /**
  * Shared UI kit — the single reusable component set for the whole project.
  * All colors/spacing/motion come from design tokens; no feature builds its own
- * buttons/inputs/modals (docs/00 §2.4 "Themeable từ gốc").
+ * buttons/inputs/modals (docs/00 §2.4 "Themeable từ gốc"). Larger pieces live
+ * in their own files and are re-exported here, so imports stay "@/shared/ui".
  */
+export { IconButton } from "./IconButton";
+export { Collapsible } from "./Collapsible";
+export { Modal } from "./Modal";
 
 /* ---------- Button ---------- */
 type ButtonVariant = "primary" | "subtle" | "ghost" | "danger";
@@ -45,23 +47,6 @@ export function ReloadButton({
     >
       <RefreshCw size={14} />
     </button>
-  );
-}
-
-/* ---------- IconButton ---------- */
-export function IconButton({
-  label,
-  className = "",
-  ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  return (
-    <button
-      type="button"
-      className={`ui-iconbtn ${className}`}
-      aria-label={label}
-      title={label}
-      {...rest}
-    />
   );
 }
 
@@ -245,76 +230,6 @@ export function Segmented({
   );
 }
 
-/* ---------- Collapsible section ---------- */
-/**
- * Titled block that folds/unfolds from its header (animated), remembering the
- * choice per `id` in localStorage. Used by the popup's sections so every block
- * — apps, audio, page tools — looks and behaves the same.
- */
-export function Collapsible({
-  id,
-  title,
-  icon: Icon,
-  count,
-  hint,
-  action,
-  defaultOpen = true,
-  children,
-}: {
-  id: string;
-  title: string;
-  icon?: LucideIcon;
-  count?: number;
-  /** small muted note next to the title (e.g. "not available here") */
-  hint?: React.ReactNode;
-  /** extra control on the right of the header (stays clickable on its own) */
-  action?: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const key = `ui.collapsible.${id}`;
-  const [open, setOpen] = React.useState(() => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved === null ? defaultOpen : saved === "1";
-    } catch {
-      return defaultOpen;
-    }
-  });
-  const toggle = () =>
-    setOpen((v) => {
-      try {
-        localStorage.setItem(key, v ? "0" : "1");
-      } catch {
-        /* storage blocked — still toggles, just forgets */
-      }
-      return !v;
-    });
-  const bodyId = `coll-${id}`;
-
-  return (
-    <section className={`ui-coll ${open ? "ui-coll--open" : ""}`}>
-      <div className="ui-coll__head">
-        <button type="button" className="ui-coll__toggle" aria-expanded={open} aria-controls={bodyId} onClick={toggle}>
-          {Icon && (
-            <span className="ui-coll__icon">
-              <Icon size={13} />
-            </span>
-          )}
-          <span className="ui-coll__title">{title}</span>
-          {count !== undefined && <span className="ui-coll__count">{count}</span>}
-          {hint && <span className="ui-coll__hint">{hint}</span>}
-          <ChevronDown size={14} className="ui-coll__chev" />
-        </button>
-        {action}
-      </div>
-      <div className="ui-coll__body" id={bodyId}>
-        <div className="ui-coll__inner">{children}</div>
-      </div>
-    </section>
-  );
-}
-
 /* ---------- Field (label + control + description/error) ---------- */
 export function Field({
   label,
@@ -376,111 +291,5 @@ export function Skeleton({
       style={{ width, height, borderRadius: radius }}
       aria-hidden
     />
-  );
-}
-
-/* ---------- Modal ---------- */
-export function Modal({
-  open,
-  onClose,
-  title,
-  width,
-  peekLabel,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title?: string;
-  width?: number | string;
-  /**
-   * Adds a "look through" eye button to the header: while it is held, the
-   * modal and backdrop go transparent so the page behind shows — e.g. to see
-   * a setting's effect without closing Settings. The string is its label.
-   */
-  peekLabel?: string;
-  children: React.ReactNode;
-}) {
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const [peek, setPeek] = React.useState(false);
-  useEffect(() => {
-    if (!open) setPeek(false);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className={`ui-modal-overlay ${peek ? "ui-modal-overlay--peek" : ""}`}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
-        >
-          <motion.div
-            className={`ui-modal ${peek ? "ui-modal--peek" : ""}`}
-            style={{ width }}
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {title && (
-              <div className="ui-modal__header">
-                <span className="ui-modal__title">{title}</span>
-                <span className="ui-modal__actions">
-                  {peekLabel && (
-                    <IconButton
-                      label={peekLabel}
-                      className={`ui-modal__peek ${peek ? "ui-modal__peek--on" : ""}`}
-                      aria-pressed={peek}
-                      // held, not toggled: capture keeps the release even if
-                      // the pointer drifts off the button while looking
-                      onPointerDown={(e) => {
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                        setPeek(true);
-                      }}
-                      onPointerUp={() => setPeek(false)}
-                      onPointerCancel={() => setPeek(false)}
-                      onLostPointerCapture={() => setPeek(false)}
-                      onKeyDown={(e) => {
-                        if (e.key === " " || e.key === "Enter") {
-                          e.preventDefault();
-                          setPeek(true);
-                        }
-                      }}
-                      onKeyUp={() => setPeek(false)}
-                      onBlur={() => setPeek(false)}
-                    >
-                      <Eye size={17} />
-                    </IconButton>
-                  )}
-                  <IconButton label="Close" onClick={onClose}>
-                    <X size={18} />
-                  </IconButton>
-                </span>
-              </div>
-            )}
-            <div className="ui-modal__body">{children}</div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body,
   );
 }

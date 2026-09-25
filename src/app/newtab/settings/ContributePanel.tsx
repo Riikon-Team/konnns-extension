@@ -14,53 +14,50 @@ import { useTranslation } from "react-i18next";
 import { browser } from "wxt/browser";
 import { Button } from "@/shared/ui";
 
+import { swr } from "@/core/net";
 import pkg from "../../../../package.json";
+import {
+  CONTRIBUTE_CACHE_KEY,
+  CONTRIBUTE_CACHE_TTL,
+  GITHUB_ISSUES_URL,
+  GITHUB_RELEASES_URL,
+  GITHUB_REPO_URL,
+  fetchCommits,
+  fetchContributors,
+  fetchReleases,
+  type CommitItem,
+  type Contributor,
+  type ReleaseItem,
+} from "./contribute-data";
 import "./contribute-panel.css";
 
-interface Contributor {
-  id: number;
-  login: string;
-  avatar_url: string;
-  html_url: string;
-  contributions: number;
-}
-
-interface CommitItem {
-  sha: string;
-  commit: {
-    message: string;
-    author: {
-      name: string;
-      date: string;
+/** null = still loading, [] = loaded but nothing (or the fetch failed with no cache) */
+function useGitHubList<T>(namespace: string, fetcher: () => Promise<T[]>): { list: T[] | null; failed: boolean } {
+  const [list, setList] = useState<T[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void swr({
+      namespace,
+      key: CONTRIBUTE_CACHE_KEY,
+      ttlMs: CONTRIBUTE_CACHE_TTL,
+      fetcher,
+      onData: (data) => {
+        if (alive) setList(data);
+      },
+      onError: (_err, hadCache) => {
+        if (!alive || hadCache) return;
+        setFailed(true);
+        setList([]);
+      },
+    });
+    return () => {
+      alive = false;
     };
-  };
-  author?: {
-    login: string;
-    avatar_url: string;
-    html_url: string;
-  };
-  html_url: string;
-}
-
-const GITHUB_REPO_URL = pkg.homepage ?? "https://github.com/konnn04/konnns-extension";
-const GITHUB_ISSUES_URL =
-  (typeof pkg.bugs === "object" && pkg.bugs?.url ? pkg.bugs.url : null) ?? `${GITHUB_REPO_URL}/issues`;
-const REPO_PATH = GITHUB_REPO_URL.replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "");
-const CONTRIBUTORS_API = `https://api.github.com/repos/${REPO_PATH}/contributors`;
-const COMMITS_API = `https://api.github.com/repos/${REPO_PATH}/commits?per_page=8`;
-const RELEASES_API = `https://api.github.com/repos/${REPO_PATH}/releases?per_page=5`;
-
-interface ReleaseItem {
-  version: string;
-  date: string;
-  isLatest?: boolean;
-  items?: string[];
-  /** raw markdown release notes (GitHub) — wins over `items` */
-  body?: string;
-}
-
-function releaseMarkdown(rel: ReleaseItem): string {
-  return rel.body?.trim() || (rel.items ?? []).map((it) => `- ${it}`).join("\n");
+    // fetcher is a module-level function
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [namespace]);
+  return { list, failed };
 }
 
 type MarkdownRenderer = (source: string) => string;
@@ -80,110 +77,13 @@ function useMarkdownRenderer(): MarkdownRenderer | null {
   return render;
 }
 
-const FALLBACK_CONTRIBUTORS: Contributor[] = [
-  {
-    id: 1,
-    login: "konnn04",
-    avatar_url: "https://avatars.githubusercontent.com/u/1000000?v=4",
-    html_url: "https://github.com/konnn04",
-    contributions: 68,
-  },
-];
-
-function getLocalReleaseChanges(currentVersion: string, isVi: boolean): ReleaseItem[] {
-  const latestTag = currentVersion.startsWith("v") ? currentVersion : `v${currentVersion}`;
-  if (!isVi) {
-    return [
-      {
-        version: latestTag,
-        date: "2026-08-21",
-        isLatest: true,
-        items: [
-          "Spotify: Added recently-played fallback when no music is actively playing & direct open button.",
-          "Spotify: Added responsive layouts (horizontal / vertical / compact).",
-          "Bookmarks Bar: Recursive multi-level nested folders with smooth horizontal slide & Back button.",
-          "Settings: Added Contribute & About section on the very first tab.",
-        ],
-      },
-      {
-        version: "v0.2.0",
-        date: "2026-08-18",
-        items: [
-          "Added MusicBox offline / local audio player with screen corner widget.",
-          "Improved Task Manager with detailed deadlines and DatePicker calendar selector.",
-          "Added wallpaper format filters (static, video, animated) and thumbnail badges.",
-          "Added programming language statistics and top GitHub repositories.",
-          "Support toolbar / panel position swapping and dock overlay mode.",
-        ],
-      },
-      {
-        version: "v0.1.0",
-        date: "2026-08-01",
-        items: [
-          "Initialized NewTab extension with WXT + React + TypeScript architecture.",
-          "Diverse theme system (12 themes), custom typography, and frosted glassmorphism.",
-          "Clock, weather, multi-engine search bar, notes, QR code, Pomodoro timer, and bookmarks bar.",
-        ],
-      },
-    ];
-  }
-  return [
-    {
-      version: latestTag,
-      date: "2026-08-21",
-      isLatest: true,
-      items: [
-        "Spotify: Hỗ trợ bài đã phát gần nhất khi không có nhạc đang phát (fallback recently-played) & nút mở trực tiếp Spotify.",
-        "Spotify: Hỗ trợ layout responsive (chiều ngang / chiều dọc / compact).",
-        "Thanh Bookmark: Hỗ trợ duyệt thư mục lồng đệ quy đa cấp, hiệu ứng lướt ngang mượt mà kèm nút Quay lại.",
-        "Cài đặt: Bổ sung mục Đóng góp & Giới thiệu (Contribute & About) ngay tab đầu tiên.",
-      ],
-    },
-    {
-      version: "v0.2.0",
-      date: "2026-08-18",
-      items: [
-        "Thêm công cụ MusicBox phát nhạc offline / file âm thanh cục bộ kèm widget góc màn hình.",
-        "Cải tiến Quản lý công việc (Tasks) với deadline chi tiết và bộ chọn ngày DatePicker.",
-        "Thêm bộ lọc định dạng hình nền (ảnh tĩnh, video, động) và huy hiệu thumbnail.",
-        "Thêm thống kê ngôn ngữ lập trình và top repo GitHub.",
-        "Hỗ trợ đảo vị trí thanh công cụ / panel và chế độ chồng lấn dock.",
-      ],
-    },
-    {
-      version: "v0.1.0",
-      date: "2026-08-01",
-      items: [
-        "Khởi tạo dự án NewTab với kiến trúc WXT + React + TypeScript.",
-        "Hệ thống Theme đa dạng (12 themes), font chữ tùy biến và hiệu ứng kính mờ (glassmorphism).",
-        "Đồng hồ, thời tiết, thanh tìm kiếm đa công cụ, ghi chú, mã QR, Pomodoro và thanh bookmark.",
-      ],
-    },
-  ];
-}
-
-const isBot = (name?: string, type?: string) => {
-  const n = (name || "").toLowerCase();
-  const t = (type || "").toLowerCase();
-  return (
-    t === "bot" ||
-    n.includes("[bot]") ||
-    n.includes("github-actions") ||
-    n.includes("dependabot") ||
-    n.endsWith("-bot")
-  );
-};
 
 export function ContributePanel() {
   const { t, i18n } = useTranslation();
-  const isVi = i18n.language?.startsWith("vi") ?? true;
   const [version, setVersion] = useState(pkg.version ?? "0.3.0");
-  const [contributors, setContributors] = useState<Contributor[]>(FALLBACK_CONTRIBUTORS);
-  const [commits, setCommits] = useState<CommitItem[]>([]);
-  const [remoteReleases, setRemoteReleases] = useState<ReleaseItem[] | null>(null);
-  const releases = remoteReleases ?? getLocalReleaseChanges(version, isVi);
-  const [loadingContributors, setLoadingContributors] = useState(true);
-  const [loadingCommits, setLoadingCommits] = useState(true);
+  const contributors = useGitHubList<Contributor>("contribute.contributors", fetchContributors);
+  const commits = useGitHubList<CommitItem>("contribute.commits", fetchCommits);
+  const releases = useGitHubList<ReleaseItem>("contribute.releases", fetchReleases);
   const [viewMode, setViewMode] = useState<"releases" | "commits">("releases");
   const renderMd = useMarkdownRenderer();
 
@@ -196,66 +96,6 @@ export function ContributePanel() {
     } catch {
       /* ignore */
     }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
-      try {
-        const res = await fetch(CONTRIBUTORS_API);
-        if (res.ok) {
-          const data: (Contributor & { type?: string })[] = await res.json();
-          if (!cancelled && Array.isArray(data) && data.length > 0) {
-            const realUsers = data.filter((c) => !isBot(c.login, c.type));
-            setContributors(realUsers.length > 0 ? realUsers : data);
-          }
-        }
-      } catch {
-        /* use fallback */
-      } finally {
-        if (!cancelled) setLoadingContributors(false);
-      }
-
-      try {
-        const res = await fetch(COMMITS_API);
-        if (res.ok) {
-          const data: CommitItem[] = await res.json();
-          if (!cancelled && Array.isArray(data) && data.length > 0) {
-            const realCommits = data.filter((c) => !isBot(c.author?.login || c.commit?.author?.name));
-            setCommits(realCommits.length > 0 ? realCommits : data);
-          }
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        if (!cancelled) setLoadingCommits(false);
-      }
-
-      try {
-        const res = await fetch(RELEASES_API);
-        if (res.ok) {
-          const data: { tag_name?: string; name?: string; published_at?: string; body?: string }[] = await res.json();
-          if (!cancelled && Array.isArray(data) && data.length > 0) {
-            const mapped: ReleaseItem[] = data.map((r, idx) => ({
-              version: r.tag_name || r.name || "Release",
-              date: r.published_at ? r.published_at.split("T")[0] : "",
-              isLatest: idx === 0,
-              body: r.body?.trim() || undefined,
-              items: [r.name || t("settings.newUpdate", "Cập nhật mới")],
-            }));
-            setRemoteReleases(mapped);
-          }
-        }
-      } catch {
-        /* keep local releases */
-      }
-    }
-
-    void fetchData();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const formatDate = (dateStr: string) => {
@@ -329,16 +169,19 @@ export function ContributePanel() {
         <div className="contribute-section__header">
           <h3 className="settings-section__title">
             <Users size={16} />
-            {t("settings.contributors")} ({contributors.length})
+            {t("settings.contributors")}
+            {contributors.list && contributors.list.length > 0 ? ` (${contributors.list.length})` : ""}
           </h3>
           <span className="contribute-section__sub">{t("settings.contributorsDesc")}</span>
         </div>
 
-        {loadingContributors ? (
+        {contributors.list === null ? (
           <p className="ui-field__desc">{t("settings.loadingContributors")}</p>
+        ) : contributors.failed ? (
+          <p className="ui-field__desc">{t("settings.githubUnavailable")}</p>
         ) : (
           <div className="contribute-grid">
-            {contributors.map((c) => (
+            {contributors.list.map((c) => (
               <a
                 key={c.id}
                 href={c.html_url}
@@ -395,43 +238,74 @@ export function ContributePanel() {
         </div>
 
         {viewMode === "releases" ? (
-          <div className="contribute-timeline">
-            {releases.map((rel) => (
-              <div key={rel.version} className="contribute-timeline__item">
-                <div className="contribute-timeline__dot-wrap">
-                  <div
-                    className={`contribute-timeline__dot ${rel.isLatest ? "contribute-timeline__dot--latest" : ""}`}
-                  />
-                  <div className="contribute-timeline__line" />
-                </div>
-                <div className="contribute-timeline__content">
-                  <div className="contribute-timeline__header">
-                    <span className="contribute-timeline__version">{rel.version}</span>
-                    {rel.isLatest && (
-                      <span className="contribute-timeline__badge">{t("settings.latest", "Mới nhất")}</span>
-                    )}
-                    <span className="contribute-timeline__date">{formatDate(rel.date)}</span>
+          releases.list === null ? (
+            <p className="ui-field__desc">{t("settings.loadingChanges")}</p>
+          ) : releases.list.length === 0 ? (
+            <p className="ui-field__desc">
+              {t(releases.failed ? "settings.githubUnavailable" : "settings.noReleases")}{" "}
+              <a href={GITHUB_RELEASES_URL} target="_blank" rel="noreferrer">
+                {t("settings.allReleases")}
+              </a>
+            </p>
+          ) : (
+            <>
+              <div className="contribute-timeline">
+                {releases.list.map((rel) => (
+                  <div key={rel.version} className="contribute-timeline__item">
+                    <div className="contribute-timeline__dot-wrap">
+                      <div
+                        className={`contribute-timeline__dot ${rel.isLatest ? "contribute-timeline__dot--latest" : ""}`}
+                      />
+                      <div className="contribute-timeline__line" />
+                    </div>
+                    <div className="contribute-timeline__content">
+                      <div className="contribute-timeline__header">
+                        <a
+                          className="contribute-timeline__version"
+                          href={rel.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={rel.title}
+                        >
+                          {rel.version}
+                        </a>
+                        {rel.isLatest && (
+                          <span className="contribute-timeline__badge">{t("settings.latest")}</span>
+                        )}
+                        {rel.prerelease && (
+                          <span className="contribute-timeline__badge contribute-timeline__badge--pre">
+                            {t("settings.prerelease")}
+                          </span>
+                        )}
+                        <span className="contribute-timeline__date">{formatDate(rel.date)}</span>
+                      </div>
+                      {!rel.body ? (
+                        <div className="contribute-md contribute-md--plain">{rel.title ?? t("settings.newUpdate")}</div>
+                      ) : renderMd ? (
+                        <div
+                          className="contribute-md"
+                          // sanitized by DOMPurify inside renderMarkdown
+                          dangerouslySetInnerHTML={{ __html: renderMd(rel.body) }}
+                        />
+                      ) : (
+                        <div className="contribute-md contribute-md--plain">{rel.body}</div>
+                      )}
+                    </div>
                   </div>
-                  {renderMd ? (
-                    <div
-                      className="contribute-md"
-                      // sanitized by DOMPurify inside renderMarkdown
-                      dangerouslySetInnerHTML={{ __html: renderMd(releaseMarkdown(rel)) }}
-                    />
-                  ) : (
-                    <div className="contribute-md contribute-md--plain">{releaseMarkdown(rel)}</div>
-                  )}
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : loadingCommits ? (
+              <a className="contribute-timeline__all" href={GITHUB_RELEASES_URL} target="_blank" rel="noreferrer">
+                {t("settings.allReleases")} <ExternalLink size={12} />
+              </a>
+            </>
+          )
+        ) : commits.list === null ? (
           <p className="ui-field__desc">{t("settings.loadingChanges")}</p>
-        ) : commits.length === 0 ? (
-          <p className="ui-field__desc">{t("settings.noCommits", "No recent commits found.")}</p>
+        ) : commits.list.length === 0 ? (
+          <p className="ui-field__desc">{t(commits.failed ? "settings.githubUnavailable" : "settings.noCommits")}</p>
         ) : (
           <div className="contribute-commits">
-            {commits.map((c) => (
+            {commits.list.map((c) => (
               <a
                 key={c.sha}
                 href={c.html_url}

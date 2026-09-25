@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Compass, Palette, Search, Sparkles, Upload, type LucideIcon } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { db } from "@/core/storage/db";
 import { on } from "@/core/event-bus";
@@ -9,17 +9,13 @@ import {
   useFeatureValues,
   useSettingsStore,
 } from "@/core/settings-engine/settingsStore";
-import { getFeatures } from "@/core/feature-registry";
-import { useWallpaperStore, wallpaperErrorKey } from "@/features/newtab/wallpaper/store";
-import { WALLPAPER_FEATURE_ID } from "@/features/newtab/wallpaper";
-import { DEFAULT_TOPIC_IDS, WALLHAVEN_TOPICS } from "@/features/newtab/wallpaper/wallhaven";
-import { SEARCH_FEATURE_ID } from "@/features/newtab/search-bar";
-import { hasSuggestPermission, requestSuggestPermission } from "@/features/newtab/search-bar/suggest";
 import { BOOKMARK_FEATURE_ID } from "@/features/newtab/bookmark-bar";
 import { requestBookmarkPermission } from "@/features/newtab/bookmark-bar/bookmarks-api";
 import { WEATHER_FEATURE_ID } from "@/features/newtab/weather";
 import { Button, Card, Segmented, Slider, TextInput, Toggle } from "@/shared/ui";
 import { ThemePicker } from "../settings/ThemePicker";
+import { WallpaperStep } from "./WallpaperStep";
+import { FeaturesStep } from "./FeaturesStep";
 import "./onboarding.css";
 
 /**
@@ -260,183 +256,4 @@ function StepContent({ step }: { step: number }) {
         </>
       );
   }
-}
-
-type WallpaperChoice = "wallhaven" | "gradient" | "upload";
-
-/** Step 3 — Wallhaven (random, with topics), theme gradient, or own image. */
-function WallpaperStep() {
-  const { t } = useTranslation();
-  const setValues = useSettingsStore((s) => s.setValues);
-  const values = useFeatureValues(WALLPAPER_FEATURE_ID);
-  const addImageFile = useWallpaperStore((s) => s.addImageFile);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-
-  const choice: WallpaperChoice =
-    values.randomMode === "wallhaven" && values.mode !== "slideshow"
-      ? "wallhaven"
-      : values.activeId
-        ? "upload"
-        : "gradient";
-  const topics = Array.isArray(values.wallhavenTopics)
-    ? (values.wallhavenTopics as string[])
-    : DEFAULT_TOPIC_IDS;
-
-  const options: Array<{ id: WallpaperChoice; icon: LucideIcon; title: string; desc: string }> = [
-    { id: "wallhaven", icon: Compass, title: t("onboarding.wpWallhaven"), desc: t("onboarding.wpWallhavenDesc") },
-    { id: "gradient", icon: Palette, title: t("onboarding.stepWallpaperGradient"), desc: t("onboarding.wpGradientDesc") },
-    { id: "upload", icon: Upload, title: t("wallpaper.upload"), desc: t("onboarding.wpUploadDesc") },
-  ];
-
-  const pick = (id: WallpaperChoice) => {
-    setUploadError(null);
-    if (id === "wallhaven") setValues(WALLPAPER_FEATURE_ID, { mode: "static", randomMode: "wallhaven" });
-    else if (id === "gradient") setValues(WALLPAPER_FEATURE_ID, { randomMode: "off", activeId: "" });
-    else fileRef.current?.click();
-  };
-
-  return (
-    <>
-      <h2 className="onboarding-step__title">{t("onboarding.stepWallpaper")}</h2>
-      <p className="onboarding-step__desc">{t("onboarding.stepWallpaperDesc")}</p>
-      <div className="onboarding-wp" role="radiogroup">
-        {options.map((o) => (
-          <button
-            key={o.id}
-            type="button"
-            role="radio"
-            aria-checked={choice === o.id}
-            className={`onboarding-wp__opt ${choice === o.id ? "onboarding-wp__opt--on" : ""}`}
-            onClick={() => pick(o.id)}
-          >
-            <o.icon size={20} />
-            <span className="onboarding-wp__title">{o.title}</span>
-            <span className="onboarding-wp__desc">{o.desc}</span>
-          </button>
-        ))}
-      </div>
-
-      {choice === "wallhaven" && (
-        <div className="onboarding-wp__topics">
-          <span className="ui-field__label">{t("wallpaper.wallhavenTopics")}</span>
-          <div className="ui-checkchips">
-            {WALLHAVEN_TOPICS.map((tp) => {
-              const on = topics.includes(tp.id);
-              return (
-                <label key={tp.id} className={`ui-checkchip ${on ? "ui-checkchip--on" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    disabled={on && topics.length <= 1}
-                    onChange={() =>
-                      setValues(WALLPAPER_FEATURE_ID, {
-                        wallhavenTopics: on ? topics.filter((x) => x !== tp.id) : [...topics, tp.id],
-                      })
-                    }
-                  />
-                  <span aria-hidden>{tp.icon}</span>
-                  {t(`wallpaper.topics.${tp.id}`)}
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {uploadError && <div className="ui-field__error">{uploadError}</div>}
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={async (e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (!f) return;
-          try {
-            const id = await addImageFile(f);
-            setValues(WALLPAPER_FEATURE_ID, { randomMode: "off", activeId: id });
-          } catch (err) {
-            setUploadError(t(wallpaperErrorKey(err)));
-          }
-        }}
-      />
-    </>
-  );
-}
-
-/** Off-by-default features worth suggesting on day one. */
-const RECOMMENDED_FEATURES = ["daily-quote", "panel-calendar", "tool-translate", "tool-qr"];
-
-/** Step 6 — recommended picks first (incl. search suggestions), then everything else. */
-function FeaturesStep() {
-  const { t } = useTranslation();
-  const setEnabled = useSettingsStore((s) => s.setEnabled);
-  const setValue = useSettingsStore((s) => s.setValue);
-  const enabledMap = useSettingsStore((s) => s.enabled);
-  const searchValues = useFeatureValues(SEARCH_FEATURE_ID);
-  const [suggestGranted, setSuggestGranted] = useState(false);
-
-  useEffect(() => {
-    void hasSuggestPermission().then(setSuggestGranted);
-  }, []);
-
-  const all = getFeatures().filter(
-    (f) => f.zone === "left-sidebar" || f.zone === "right-sidebar" || f.zone === "center",
-  );
-  const recommended = RECOMMENDED_FEATURES.map((id) => all.find((f) => f.id === id)).filter(
-    (f): f is NonNullable<typeof f> => !!f,
-  );
-  const others = all.filter((f) => !RECOMMENDED_FEATURES.includes(f.id));
-  const isOn = (f: (typeof all)[number]) => enabledMap[f.id] ?? f.defaultEnabled;
-
-  const suggestOn = searchValues.suggestions !== false && suggestGranted;
-  // the permission prompt needs the click's user gesture — call it first, synchronously
-  const setSuggest = (v: boolean) => {
-    setValue(SEARCH_FEATURE_ID, "suggestions", v);
-    if (v) void requestSuggestPermission().then(setSuggestGranted);
-  };
-
-  const enableAllRecommended = () => {
-    if (!suggestOn) setSuggest(true);
-    for (const f of recommended) setEnabled(f.id, true);
-  };
-  const allRecommendedOn = suggestOn && recommended.every(isOn);
-
-  const row = (f: (typeof all)[number], rec = false) => (
-    <div className={`onboarding-feature ${rec ? "onboarding-feature--rec" : ""}`} key={f.id}>
-      <span className="onboarding-feature__name">
-        <f.icon size={16} /> {t(f.nameKey)}
-      </span>
-      <Toggle checked={isOn(f)} onChange={(v) => setEnabled(f.id, v)} />
-    </div>
-  );
-
-  return (
-    <>
-      <h2 className="onboarding-step__title">{t("onboarding.stepFeatures")}</h2>
-      <p className="onboarding-step__desc">{t("onboarding.stepFeaturesDesc")}</p>
-      <div className="onboarding-features">
-        <div className="onboarding-features__head">
-          <span className="onboarding-features__group">
-            <Sparkles size={13} /> {t("onboarding.recommended")}
-          </span>
-          <Button size="sm" variant="primary" disabled={allRecommendedOn} onClick={enableAllRecommended}>
-            {t("onboarding.enableRecommended")}
-          </Button>
-        </div>
-        <div className="onboarding-feature onboarding-feature--rec">
-          <span className="onboarding-feature__name">
-            <Search size={16} /> {t("search.suggestions")}
-          </span>
-          <Toggle checked={suggestOn} onChange={setSuggest} />
-        </div>
-        {recommended.map((f) => row(f, true))}
-        <span className="onboarding-features__group">{t("onboarding.allFeatures")}</span>
-        {others.map((f) => row(f))}
-      </div>
-    </>
-  );
 }

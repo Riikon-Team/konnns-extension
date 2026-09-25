@@ -2,37 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image as ImageIcon } from "lucide-react";
 import { registerFeature } from "@/core/feature-registry";
 import { CORE_FEATURE_ID, useFeatureValues, useSettingsStore } from "@/core/settings-engine/settingsStore";
-import { getWallpaperUrl, useWallpaperStore, wallpaperExists } from "./store";
+import { WALLPAPER_FEATURE_ID } from "./id";
+import { getWallpaperUrl, useWallpaperStore } from "./store";
 import { WallpaperManager } from "./WallpaperManager";
 import { wallpaperSettingsSchema } from "./settings.schema";
-import { fetchRandomWallhavenWallpaper, wallhavenOptionsFrom } from "./wallhaven";
+import { wallhavenOptionsFrom } from "./wallhaven";
+import { useWallhavenRandom } from "./useWallhavenRandom";
+import { useParallax } from "./useParallax";
+import "./migrations";
 import "./wallpaper.css";
 
-export const WALLPAPER_FEATURE_ID = "wallpaper";
-/** quiet period after a Wallhaven setting changes before fetching a new image */
-const WALLHAVEN_SETTLE_MS = 1200;
-
-/**
- * Keep only the newest `wallhavenKeep` auto-downloaded Wallhaven images.
- * Never touches the one on screen, the chosen wallpaper or slideshow picks.
- */
-async function pruneWallhaven(): Promise<void> {
-  const settings = useSettingsStore.getState();
-  const v = settings.values[WALLPAPER_FEATURE_ID] ?? {};
-  const keepIds = [
-    typeof v.wallhavenLastId === "string" ? v.wallhavenLastId : "",
-    typeof v.activeId === "string" ? v.activeId : "",
-    ...(Array.isArray(v.slideItems) ? (v.slideItems as string[]) : []),
-  ].filter(Boolean);
-  const store = useWallpaperStore.getState();
-  // Versions before the `auto` flag saved random picks as plain "wallhaven-*"
-  // rows. Adopt them once so they count toward the cap too.
-  if (v.wallhavenLegacyAdopted !== true) {
-    await store.adoptLegacyWallhaven(keepIds);
-    settings.setValue(WALLPAPER_FEATURE_ID, "wallhavenLegacyAdopted", true);
-  }
-  await store.pruneAuto(wallhavenOptionsFrom(v).keep, keepIds);
-}
+export { WALLPAPER_FEATURE_ID };
 
 interface Layer {
   key: string;
@@ -106,9 +86,12 @@ function WallpaperLayer() {
   const itemsLoaded = useWallpaperStore((s) => s.loaded);
   const loadItems = useWallpaperStore((s) => s.load);
   const [randomId, setRandomId] = useState<string | null>(null);
-  const [wallhavenActiveId, setWallhavenActiveId] = useState<string | null>(null);
-  // signature last handled — refs survive StrictMode's remount, so this also dedupes that
-  const wallhavenSigRef = useRef<string | null>(null);
+  const wallhavenActiveId = useWallhavenRandom({
+    enabled: !slideshow && randomModeKind === "wallhaven",
+    hydrated,
+    signature: wallhavenSig,
+    keep: wallhavenKeep,
+  });
 
   useEffect(() => {
     if (isLocalRandom && !itemsLoaded) void loadItems();
@@ -125,72 +108,6 @@ function WallpaperLayer() {
     // pick once when random mode turns on / library first loads
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLocalRandom, randomModeKind, itemsLoaded]);
-
-  // Wallhaven random-on-open. Reuses the last downloaded image until the refresh
-  // interval runs out (or the topics change) instead of downloading a new
-  // multi-MB file on every single tab.
-  useEffect(() => {
-    if (!hydrated || slideshow || randomModeKind !== "wallhaven") return;
-    if (wallhavenSigRef.current === wallhavenSig) return;
-    // First run on tab open: go now. Later runs come from the user editing
-    // settings (ticking topics, picking resolution…) — wait for them to settle
-    // so a burst of edits costs one download, not one per click.
-    const firstRun = wallhavenSigRef.current === null;
-    const timer = window.setTimeout(
-      () => {
-        wallhavenSigRef.current = wallhavenSig;
-        void runWallhaven();
-      },
-      firstRun ? 0 : WALLHAVEN_SETTLE_MS,
-    );
-    return () => window.clearTimeout(timer);
-
-    async function runWallhaven() {
-      const settings = useSettingsStore.getState();
-      const current = settings.values[WALLPAPER_FEATURE_ID] ?? {};
-      const opts = wallhavenOptionsFrom(current);
-      const lastId = typeof current.wallhavenLastId === "string" ? current.wallhavenLastId : "";
-      const lastAt = typeof current.wallhavenLastAt === "number" ? current.wallhavenLastAt : 0;
-      const lastSig = current.wallhavenLastSig;
-      // (the previous pick is already on screen via `wallhavenLastId` while this runs)
-      const lastUsable = !!lastId && (await wallpaperExists(lastId));
-      const fresh =
-        lastUsable &&
-        lastSig === opts.signature &&
-        opts.refreshMs > 0 &&
-        Date.now() - lastAt < opts.refreshMs;
-      if (fresh) return;
-
-      try {
-        const wp = await fetchRandomWallhavenWallpaper(opts);
-        if (!wp) return;
-        const store = useWallpaperStore.getState();
-        const newId = await store.addFromUrl(wp.path, { auto: true });
-        setWallhavenActiveId(newId);
-        settings.setValues(WALLPAPER_FEATURE_ID, {
-          wallhavenLastId: newId,
-          wallhavenLastAt: Date.now(),
-          wallhavenLastSig: opts.signature,
-        });
-        await pruneWallhaven();
-      } catch (err) {
-        console.warn("Failed to fetch random Wallhaven wallpaper:", err);
-      }
-    }
-  }, [hydrated, slideshow, randomModeKind, wallhavenSig]);
-
-  // Cap the auto-downloaded Wallhaven images — also when the limit is lowered,
-  // and once at tab open for images saved by older versions.
-  // Debounced: deletion is permanent, and dragging the slider past 1 on the way
-  // to 5 must not wipe images. Cancelling here only postpones — the next tab
-  // open prunes anyway.
-  useEffect(() => {
-    if (!hydrated || randomModeKind !== "wallhaven") return;
-    const timer = window.setTimeout(() => {
-      void pruneWallhaven().catch((err) => console.warn("Wallhaven prune failed:", err));
-    }, WALLHAVEN_SETTLE_MS);
-    return () => window.clearTimeout(timer);
-  }, [hydrated, randomModeKind, wallhavenKeep]);
 
   const slideActiveId =
     slideshow && slideItems.length > 0
@@ -215,62 +132,7 @@ function WallpaperLayer() {
   const parallaxOn = values.parallax === true && !lowPower;
   const idleSway = parallaxOn && values.parallaxIdle === true;
   const layerRef = useRef<HTMLDivElement>(null);
-
-  // Parallax: the wallpaper shifts slightly opposite the pointer. With "idle
-  // sway", once the mouse rests it drifts on its own along a slow, never-
-  // repeating path (two sines per axis, random phases per tab). One rAF loop
-  // eases toward whichever target applies — frame-rate independent, and it
-  // stops writing once settled.
-  useEffect(() => {
-    const el = layerRef.current;
-    if (!parallaxOn || !el) {
-      el?.style.removeProperty("--parallax-x");
-      el?.style.removeProperty("--parallax-y");
-      return;
-    }
-    const MAX = 14; // px at the screen edge
-    const IDLE_AFTER = 2500; // ms without mouse movement
-    const ph = Array.from({ length: 4 }, () => Math.random() * Math.PI * 2);
-    let tx = 0;
-    let ty = 0;
-    let x = 0;
-    let y = 0;
-    let lastMove = performance.now();
-    let lastT = 0;
-    let raf = 0;
-
-    const onMove = (e: MouseEvent) => {
-      tx = -(e.clientX / window.innerWidth - 0.5) * 2;
-      ty = -(e.clientY / window.innerHeight - 0.5) * 2;
-      lastMove = performance.now();
-    };
-    const loop = (t: number) => {
-      raf = requestAnimationFrame(loop);
-      const dt = lastT ? Math.min(100, t - lastT) : 16;
-      lastT = t;
-      const idle = idleSway && t - lastMove > IDLE_AFTER;
-      if (idle) {
-        const s = t / 1000;
-        tx = 0.55 * Math.sin(s * 0.21 + ph[0]) + 0.3 * Math.sin(s * 0.083 + ph[1]);
-        ty = 0.55 * Math.sin(s * 0.17 + ph[2]) + 0.3 * Math.sin(s * 0.061 + ph[3]);
-      }
-      // quick follow for the mouse, lazy glide for the drift (and the hand-over)
-      const k = 1 - Math.exp(-dt / (idle ? 900 : 120));
-      const nx = x + (tx - x) * k;
-      const ny = y + (ty - y) * k;
-      if (Math.abs(nx - x) * MAX < 0.01 && Math.abs(ny - y) * MAX < 0.01) return; // settled
-      x = nx;
-      y = ny;
-      el.style.setProperty("--parallax-x", `${(x * MAX).toFixed(2)}px`);
-      el.style.setProperty("--parallax-y", `${(y * MAX).toFixed(2)}px`);
-    };
-    window.addEventListener("mousemove", onMove);
-    raf = requestAnimationFrame(loop);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      cancelAnimationFrame(raf);
-    };
-  }, [parallaxOn, idleSway]);
+  useParallax(layerRef, parallaxOn, idleSway);
 
   const videoSound = values.videoSound === true;
   const videoVolume = typeof values.videoVolume === "number" ? values.videoVolume : 50;
@@ -452,28 +314,6 @@ function WallpaperLayer() {
     </div>
   );
 }
-
-// Parallax, dim and blur used to live in Appearance (core); carry them over
-// once each (separate flags: parallax moved in an earlier release).
-let appearanceMigrated = false;
-const stopAppearanceMigration = useSettingsStore.subscribe((s) => {
-  if (!s.hydrated || appearanceMigrated) return;
-  appearanceMigrated = true;
-  queueMicrotask(() => stopAppearanceMigration());
-  const wp = s.values[WALLPAPER_FEATURE_ID] ?? {};
-  const core = s.values[CORE_FEATURE_ID] ?? {};
-  const patch: Record<string, unknown> = {};
-  if (wp.parallaxMigrated !== true) {
-    patch.parallaxMigrated = true;
-    if (core.parallax === true) patch.parallax = true;
-  }
-  if (wp.dimBlurMigrated !== true) {
-    patch.dimBlurMigrated = true;
-    if (typeof core.bgDim === "number") patch.bgDim = core.bgDim;
-    if (typeof core.bgBlur === "number") patch.bgBlur = core.bgBlur;
-  }
-  if (Object.keys(patch).length > 0) s.setValues(WALLPAPER_FEATURE_ID, patch);
-});
 
 registerFeature({
   id: WALLPAPER_FEATURE_ID,

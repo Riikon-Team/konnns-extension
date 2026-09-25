@@ -42,10 +42,22 @@ ESLint chặn cứng: một specifier `@/features/**` **bên trong** các thư m
 
 Không đụng code lõi. Đúng hai bước:
 
-1. Tạo `features/site/<ten>/index.tsx` gọi `registerSiteApp({ ... })`.
-2. Thêm một dòng `import "./<ten>"` vào `features/site/index.ts`.
+1. Tạo `features/site/<ten>/index.tsx` gọi `registerSiteApp({ ... })` (hoặc `features/newtab/<ten>/index.tsx` gọi `registerFeature`).
+2. Thêm một dòng `import "./<ten>"` vào barrel `index.ts` của thư mục cha.
 
-Ba registry (`feature-registry`, `site-registry`, `embed-registry`) đều là `Map` + hàm `register*()`, và đăng ký là **side effect của việc import**. Không chỗ nào hardcode danh sách.
+Bốn registry (`feature-registry`, `site-registry`, `embed-registry`, `popup-widget-registry`) đều là `Map` + hàm `register*()`, và đăng ký là **side effect của việc import**. Không chỗ nào hardcode danh sách.
+
+Các trường hay bị quên:
+
+| Registry | Trường | Để làm gì |
+|---|---|---|
+| `registerSiteApp` | `category` | nhóm trên rail trái + trang chủ (`media`/`text`/`dev`/`other`) |
+| `registerSiteApp` | `dataTables` | **khai báo mọi bảng Dexie app ghi vào** — trang Cài đặt site dùng để đo dung lượng, backup riêng, xoá dữ liệu. Thiếu = dữ liệu vô hình ở đó |
+| `registerFeature` | `overlay` | component vẽ ngoài zone (tự `position: fixed`), mount cả khi panel đóng — vd bong bóng tin tức, bong bóng thời tiết |
+| `registerFeature` | `settingsExtra` + `settingsExtraPosition` | UI tuỳ biến cạnh form schema; `"top"` khi phải cấu hình trước (kết nối GitHub) |
+| `registerFeature` | `defaultEnabled` | tính năng tốn tài nguyên / cần quyền (music-fx, spotify…) để `false` |
+
+Bảng mới của New Tab thì thêm vào `NEWTAB_TABLES` (`core/storage/scopes.ts`), nếu không nó không nằm trong backup New Tab.
 
 ## 5. Logic nặng phải tách khỏi React
 
@@ -60,7 +72,23 @@ pnpm exec esbuild <file-test>.ts --bundle --platform=node --format=esm \
 
 Viết file test vào thư mục scratchpad, **không** vào repo. Một hàm chỉ test được khi nó không chạm DOM — đó là lý do thật của quy ước này, không phải vì đẹp.
 
-Ví dụ đang có: `video-editor/engine/tracks.ts`, `compose.ts`, `frameGeometry.ts`; `audio-editor/engine/dsp.ts`; `web-time-tracker/engine/session.ts`.
+Ví dụ đang có: `video-editor/engine/tracks.ts`, `compose.ts`, `frameGeometry.ts`; `audio-editor/engine/dsp.ts`; `web-time-tracker/engine/session.ts`; `core/audio-signal/engine.ts` (dải tần, onset, bắt nhịp); `core/storage/backup.ts` (`dehydrate`/`hydrate` — chạy được dưới Node vì chỉ cần `Blob`).
+
+## 5b. Giữ file ngắn
+
+Component quá ~400 dòng thì tách, theo các khuôn đã dùng:
+
+| Tách cái gì | Thành | Ví dụ |
+|---|---|---|
+| một `useEffect` lớn tự đứng được | hook `useX.ts` cạnh component | `wallpaper/useParallax.ts`, `useWallhavenRandom.ts` |
+| migration chạy một lần khi settings hydrate | module side-effect `migrations.ts`, import từ `index.tsx` | `wallpaper/migrations.ts` |
+| hằng số / id cần import mà không kéo cả component | `id.ts`, `*-data.ts` | `wallpaper/id.ts`, `settings/contribute-data.ts` |
+| sub-component / bước wizard | file riêng cùng thư mục | `overlays/WallpaperStep.tsx`, `bookmark-bar/FolderButton.tsx` |
+| thành phần UI kit lớn | file riêng, **re-export** từ `shared/ui/index.tsx` | `Modal.tsx`, `Collapsible.tsx` — import vẫn là `@/shared/ui` |
+
+Tách để dễ đọc, **không đổi hành vi**; `index.tsx` của feature vẫn giữ `registerFeature` và re-export những gì chỗ khác đang import (vd `WALLPAPER_FEATURE_ID`).
+
+Comment: giải thích *vì sao*, không kể lại code. Không để code bị comment-out.
 
 ## 6. i18n
 
@@ -87,6 +115,12 @@ Ghi lại để không đạp lại:
 - **Huỷ autosave đang chờ = mất dữ liệu.** Cleanup nên *chạy nốt* thay vì `clearTimeout` rồi thôi.
 - **Firefox build là MV2**, Chrome là MV3. `core/messaging` feature-detect để rơi từ `scripting.executeScript` về `tabs.executeScript`.
 - **Kiểm API bên thứ ba bằng `.d.ts` trong `node_modules`**, đừng tin trí nhớ. Đã có hai lần tài liệu thiết kế nội bộ mô tả sai API mediabunny và bị bắt ở bước này.
+- **Quyền optional: namespace chỉ tồn tại SAU khi được cấp.** `chrome.offscreen`, `chrome.tabCapture` là `undefined` trước khi user đồng ý — đừng dùng chúng để kiểm "trình duyệt có hỗ trợ không" (bản đầu làm thế → nút xin quyền không bao giờ hiện). Và `requestPermissions` phải gọi **đồng bộ trong user gesture** (`core/permissions`): gọi sau một `await` là mất gesture.
+- **Service worker không tự nạp code mới.** Bản unpacked: trang (popup/newtab/site) đọc file mới mỗi lần mở, nhưng background chạy code cũ tới khi bấm Tải lại extension. Message mới gửi tới worker cũ nhận về `undefined` — xử lý thành lỗi có tên (`audioMixer.errStaleWorker`) thay vì im lặng.
+- **`openPopup()` do code gọi không cấp `activeTab`.** Chỉ cú bấm icon/phím tắt thật mới cấp; `tabCapture` cần nó.
+- **Âm thanh: `AnalyserNode.maxDecibels` mặc định −30 làm bass bão hoà** (median dải sub ≈ 0.99 trên nhạc remix) → bắt nhịp chết. Nguồn dùng −10; bus audio-signal scale lại cột visualizer. Hiệu chỉnh bắt nhịp bằng file nhạc thật giải mã qua ffmpeg + giả lập AnalyserNode dưới Node, đừng chỉnh mò trên trình duyệt.
+- **`backdrop-filter`/`filter` tạo stacking context mới** → dropdown (gợi ý tìm kiếm) bị widget bên cạnh đè dù `z-index` cao. Sửa bằng nâng cả khối đang focus: `.zone-center > *:focus-within { z-index: 5 }`.
+- **PowerShell nuốt dấu `"`** khi truyền chuỗi làm tham số cho `node`/script → `import React from react;`. Dùng nháy đơn hoặc ghi file bằng công cụ Write.
 
 ## 9. Commit
 
@@ -98,6 +132,10 @@ Conventional Commits, xem `CONTRIBUTING.md`. Chỉ commit khi được yêu cầ
 |---|---|
 | Kiến trúc, đặt file ở đâu | `docs/architecture.md` |
 | Nguyên tắc chung | `docs/00-tong-quan-va-nguyen-tac.md` |
-| Custom Site + quy tắc 1 tool = 1 thư mục | `docs/site/00-tong-quan.md` |
+| Custom Site + quy tắc 1 tool = 1 thư mục, trang Cài đặt site | `docs/site/00-tong-quan.md` |
 | Tool nhúng | `docs/embed/00-tong-quan.md` |
+| Storage, bảng thuộc ai, backup v2, dọn dung lượng | `docs/core-he-thong/03-storage-backup.md` |
+| Audio Mixer (bắt âm thanh tab, offscreen) | `docs/site/07-audio-mixer.md` |
+| Hiệu ứng âm nhạc, bus audio-signal, bắt nhịp | `docs/new-tab/05-hieu-ung-am-nhac.md` |
+| Các tính năng New Tab gần đây (thời tiết, tin tức, GitHub, hình nền) | `docs/new-tab/06-tinh-nang-gan-day.md` |
 | Thiết kế từng tool | `docs/roadmap/*.md`, `docs/site/*.md` |
