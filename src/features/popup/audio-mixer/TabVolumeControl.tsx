@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCcw, SlidersHorizontal } from "lucide-react";
 import { IconButton } from "@/shared/ui";
-import { hasPermissions, requestPermissions } from "@/core/permissions";
+import { requestPermissions } from "@/core/permissions";
 import { sendToBackground } from "@/core/messaging";
+
+/** fire-and-forget worker messages: a closed port must not become an unhandled rejection */
+const ignore = () => {};
 
 const DEFAULT_GAIN = 1;
 const MAX_GAIN = 2;
@@ -44,12 +47,14 @@ export function TabVolumeControl({
   };
 
   const start = async () => {
+    // FIRST statement of the click handler: an `await` before it would drop
+    // the user gesture and Chrome rejects the request. Already granted →
+    // resolves true without a prompt, so no hasPermissions() check first.
+    const request = requestPermissions({ permissions: ["tabCapture", "offscreen"] });
     setBusy(true);
     setError(null);
     try {
-      const granted =
-        (await hasPermissions({ permissions: ["tabCapture", "offscreen"] })) ||
-        (await requestPermissions({ permissions: ["tabCapture", "offscreen"] }));
+      const granted = await request;
       if (!granted) {
         fail("audioMixer.permissionDenied");
         return;
@@ -81,12 +86,12 @@ export function TabVolumeControl({
 
   const change = (next: number) => {
     onGainChange(next);
-    void sendToBackground({ type: "tabMixer:setGain", tabId, gain: next });
+    sendToBackground({ type: "tabMixer:setGain", tabId, gain: next }).catch(ignore);
   };
 
   const release = () => {
     onGainChange(undefined);
-    void sendToBackground({ type: "tabMixer:stop", tabId });
+    sendToBackground({ type: "tabMixer:stop", tabId }).catch(ignore);
   };
 
   if (gain === undefined) {

@@ -9,6 +9,7 @@ type ChromePermissions = {
   permissions?: {
     request?: (p: PermissionSpec, cb: (granted: boolean) => void) => void;
   };
+  runtime?: { lastError?: { message?: string } };
 };
 
 // the polyfill types narrow `permissions` to a manifest-permission union; our
@@ -28,7 +29,13 @@ export function requestPermissions(perms: PermissionSpec): Promise<boolean> {
     try {
       const chromeApi = (globalThis as { chrome?: ChromePermissions }).chrome;
       if (chromeApi?.permissions?.request) {
-        chromeApi.permissions.request(perms, (granted) => resolve(!!granted));
+        chromeApi.permissions.request(perms, (granted) => {
+          // reading lastError marks it handled; otherwise Chrome logs
+          // "Unchecked runtime.lastError" (e.g. "must be called during a user gesture")
+          const err = chromeApi.runtime?.lastError;
+          if (err) console.warn("[permissions] request failed:", err.message);
+          resolve(!err && !!granted);
+        });
         return;
       }
       void browser.permissions

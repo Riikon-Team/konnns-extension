@@ -11,10 +11,12 @@
 .onboarding-card {
   width: min(92vw, 560px);
   min-height: 420px;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   padding: var(--space-6);
   overflow: hidden;
+  overflow-y: auto;
 }
 .onboarding-step {
   flex: 1;

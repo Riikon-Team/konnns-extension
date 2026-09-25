@@ -73,7 +73,7 @@ export function Onboarding() {
 
   return (
     <div className="onboarding-overlay">
-      <Card elevated className="onboarding-card">
+      <Card elevated className="onboarding-card overflow-y-auto">
         <div className="onboarding-dots" aria-hidden>
           {Array.from({ length: TOTAL_STEPS }, (_, i) => (
             <span

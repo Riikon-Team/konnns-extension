@@ -21,6 +21,7 @@ import {
   isInjectableUrl,
   runEmbedTool,
   sendToBackground,
+  siteUrl,
   type EmbedRunResult,
 } from "@/core/messaging";
 import { EMBED_CATALOG, EMBED_SETTINGS_ID, type EmbedToolEntry } from "@/features/embed/catalog";
@@ -96,7 +97,11 @@ function PopupBody() {
     // the count is what orders the shortcut row next time; recorded before
     // navigating away because the popup is destroyed the moment it opens a tab
     const tracked = appId ? trackAppOpen(appId) : Promise.resolve();
-    void tracked.then(() => sendToBackground({ type: "site:open", route })).then(() => window.close());
+    void tracked
+      .then(() => sendToBackground({ type: "site:open", route }))
+      // worker unreachable (e.g. mid-update): open the page directly rather than do nothing
+      .catch(() => browser.tabs.create({ url: siteUrl(route) }))
+      .then(() => window.close());
   }, []);
 
   const onRun = useCallback(

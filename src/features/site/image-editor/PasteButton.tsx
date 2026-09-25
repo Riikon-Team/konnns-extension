@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ClipboardPaste } from "lucide-react";
 import { Button } from "@/shared/ui";
-import { hasPermissions, requestPermissions } from "@/core/permissions";
+import { requestPermissions } from "@/core/permissions";
 import type { EditorCanvasHandle } from "./EditorCanvas";
 
 /**
@@ -24,11 +24,11 @@ export function PasteButton({
   const [busy, setBusy] = useState(false);
 
   const paste = async () => {
+    // first statement, before any await, or the user gesture is lost — see core/permissions.ts
+    const request = requestPermissions({ permissions: ["clipboardRead"] });
     setBusy(true);
     try {
-      const granted = (await hasPermissions({ permissions: ["clipboardRead"] })) ||
-        // must stay inside this click handler — see core/permissions.ts
-        (await requestPermissions({ permissions: ["clipboardRead"] }));
+      const granted = await request;
       if (!granted) {
         onError("imageEditor.clipboardDenied");
         return;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Music, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Volume2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ListMusic, Music, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Volume2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { registerFeature } from "@/core/feature-registry";
 import { IconButton, Slider } from "@/shared/ui";
@@ -178,7 +178,7 @@ registerFeature({
   id: MUSICBOX_FEATURE_ID,
   zone: "right-sidebar",
   nameKey: "features.tool-musicbox",
-  icon: Music,
+  icon: ListMusic, // not Music: that one is Spotify's, and both sit in the docks
   defaultEnabled: false,
   settingsSchema: musicboxSettingsSchema,
   settingsExtra: MusicBoxSettings,

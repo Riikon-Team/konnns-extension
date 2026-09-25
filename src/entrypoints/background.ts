@@ -49,6 +49,16 @@ export default defineBackground(() => {
     // worker would answer its own forwarded message and loop forever.
     if ((msg as { target?: string }).target === "offscreen") return undefined;
 
+    // Always answer, success or failure: a handler that rejects without calling
+    // sendResponse leaves the caller with "message port closed" instead of a
+    // reason. A task resolving to undefined answers { ok: true }.
+    const reply = (task: Promise<unknown>): true => {
+      task
+        .then((value) => sendResponse(value === undefined ? { ok: true } : value))
+        .catch((err: unknown) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+      return true;
+    };
+
     switch (msg.type) {
       // Provide redirect URI to pages that can't access browser.identity directly
       // (e.g. newtab in wxt dev mode served from localhost)
@@ -57,41 +67,23 @@ export default defineBackground(() => {
         sendResponse(msg.path ? `${base}${msg.path}` : base);
         return true; // Keep the message channel open for async response
       }
-      case "site:open": {
-        void openSite(msg.route ?? "/").then(() => sendResponse(true));
-        return true;
-      }
-      case "tabMixer:capture": {
-        void captureTab(msg.tabId, msg.streamId, msg.gain)
-          .then(() => sendResponse({ ok: true }))
-          .catch((err: unknown) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
-        return true;
-      }
-      case "tabMixer:start": {
-        void startTabCapture(msg.tabId, msg.gain)
-          .then(() => sendResponse({ ok: true }))
-          .catch((err: unknown) => sendResponse({ ok: false, error: err instanceof Error ? err.message : String(err) }));
-        return true;
-      }
-      case "tabMixer:setGain": {
-        void setTabGain(msg.tabId, msg.gain).then(() => sendResponse({ ok: true }));
-        return true;
-      }
-      case "tabMixer:stop": {
-        void releaseTab(msg.tabId).then(() => sendResponse({ ok: true }));
-        return true;
-      }
-      case "tabMixer:list": {
-        void listTabGains().then((gains) => sendResponse({ ok: true, value: gains }));
-        return true;
-      }
-      case "timeTracker:seed": {
+      case "site:open":
+        return reply(openSite(msg.route ?? "/").then(() => true));
+      case "tabMixer:capture":
+        return reply(captureTab(msg.tabId, msg.streamId, msg.gain));
+      case "tabMixer:start":
+        return reply(startTabCapture(msg.tabId, msg.gain));
+      case "tabMixer:setGain":
+        return reply(setTabGain(msg.tabId, msg.gain));
+      case "tabMixer:stop":
+        return reply(releaseTab(msg.tabId));
+      case "tabMixer:list":
+        return reply(listTabGains().then((gains) => ({ ok: true, value: gains })));
+      case "timeTracker:seed":
         // Granting the optional "tabs" permission fires no tab event of its
         // own — without this, tracking would silently wait for the next
         // manual tab switch before the first session ever started.
-        void seedFromActiveTab().then(() => sendResponse(true));
-        return true;
-      }
+        return reply(seedFromActiveTab().then(() => true));
       default:
         return undefined; // not ours — let other listeners (content scripts) answer
     }

@@ -51,7 +51,9 @@ export function AudioMixerWidget() {
         | { ok?: boolean }
         | undefined;
       if (reply?.ok) setGains((prev) => ({ ...(prev ?? {}), [activeTabId]: 1 }));
-    })();
+    })().catch(() => {
+      /* best-effort: the manual "enable volume" button still reports errors */
+    });
   }, [settingsReady, autoCapture, activeTabId, gains, tabs]);
 
   const refresh = useCallback(async () => {
