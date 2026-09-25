@@ -10,8 +10,6 @@ import { QuickSettings } from "./QuickSettings";
 import { NotFound } from "./pages/NotFound";
 import { ContributePanel } from "../newtab/settings/ContributePanel";
 
-const RAIL_KEY = "site.rail.collapsed";
-
 export function SiteShell() {
   const { t } = useTranslation();
   const route = useHashRoute();
@@ -22,26 +20,21 @@ export function SiteShell() {
     void ensurePersistentStorage();
   }, []);
 
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(RAIL_KEY) === "1";
-    } catch {
-      // private windows and blocked site data both throw here
-      return false;
-    }
-  });
-  useEffect(() => {
-    try {
-      localStorage.setItem(RAIL_KEY, collapsed ? "1" : "0");
-    } catch {
-      /* not worth surfacing: the rail still works, it just forgets */
-    }
-  }, [collapsed]);
-
   const isHome = route.path === "/";
   const active = isHome ? undefined : matchSiteApp(route.path);
   const Content = active?.component;
   const isZen = route.query.zen === "1";
+
+  // Rail follows the route: open on Home, folded inside an app (the tool gets
+  // the room). The toggle overrides it only until the next navigation.
+  const [railPath, setRailPath] = useState(route.path);
+  const [railCollapsed, setRailCollapsed] = useState(!isHome);
+  if (railPath !== route.path) {
+    // reset during render (not in an effect) so the new page never paints with the old state
+    setRailPath(route.path);
+    setRailCollapsed(!isHome);
+  }
+  const toggleRail = () => setRailCollapsed((v) => !v);
 
   return (
     <div className={`site ${isZen ? "site--zen" : ""}`}>
@@ -50,11 +43,11 @@ export function SiteShell() {
           <button
             type="button"
             className="site__rail-toggle"
-            aria-expanded={!collapsed}
-            title={t(collapsed ? "site.expandRail" : "site.collapseRail")}
-            onClick={() => setCollapsed((v) => !v)}
+            aria-expanded={!railCollapsed}
+            title={t(railCollapsed ? "site.expandRail" : "site.collapseRail")}
+            onClick={toggleRail}
           >
-            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            {railCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
           </button>
           <a className="site__brand" href="#/">
             <PanelsTopLeft size={18} />
@@ -66,7 +59,7 @@ export function SiteShell() {
         </header>
       )}
 
-      <div className={`site__body ${isZen ? "site__body--zen" : collapsed ? "site__body--rail-collapsed" : ""}`}>
+      <div className={`site__body ${isZen ? "site__body--zen" : railCollapsed ? "site__body--rail-collapsed" : ""}`}>
         {!isZen && (
           <nav className="site__rail" aria-label={t("site.title")}>
 

@@ -4,6 +4,7 @@ import { clearFrame, drawLayer, needsPicture, type LayerPicture } from "./engine
 import { AudioPreview } from "./engine/playback";
 import { projectDuration } from "./engine/tracks";
 import type { TimelineTrack, VideoItem, VisualItem } from "./engine/model";
+import { decodeAnimatedImage, disposeAnimatedImage, frameForTime, type AnimatedImage } from "./engine/animatedImage";
 
 /**
  * Preview — docs/test-001.md §0.2 rule 5 and §6.4.
@@ -75,6 +76,7 @@ export function PreviewPlayer({
   /** one decoder per video ITEM — two items may read the same file at different offsets */
   const decoders = useRef(new Map<string, HTMLVideoElement>());
   const images = useRef(new Map<string, LayerPicture>());
+  const animatedImages = useRef(new Map<string, AnimatedImage>());
   const audio = useRef<AudioPreview | null>(null);
 
   const tracksRef = useRef(tracks);
@@ -136,7 +138,7 @@ export function PreviewPlayer({
     }
   }, [tracks, sourceUrls]);
 
-  /* --------------------------------------------- stills, decoded once each */
+  /* --------------------------------------------- stills & animated images */
   useEffect(() => {
     let live = true;
     const wanted = new Map<string, string>();
@@ -152,18 +154,31 @@ export function PreviewPlayer({
       images.current.delete(id);
     }
 
+    for (const [id, anim] of animatedImages.current) {
+      if (wanted.has(id)) continue;
+      disposeAnimatedImage(anim);
+      animatedImages.current.delete(id);
+    }
+
     void (async () => {
       for (const sourceId of wanted.keys()) {
-        if (images.current.has(sourceId)) continue;
+        if (images.current.has(sourceId) || animatedImages.current.has(sourceId)) continue;
         const url = sourceUrls.get(sourceId);
         if (!url) continue;
         try {
-          const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+          const resp = await fetch(url);
+          const blob = await resp.blob();
+          const anim = await decodeAnimatedImage(blob);
           if (!live) {
-            bitmap.close();
+            disposeAnimatedImage(anim);
             return;
           }
-          images.current.set(sourceId, { image: bitmap, sourceWidth: bitmap.width, sourceHeight: bitmap.height });
+          if (anim.frames.length > 1) {
+            animatedImages.current.set(sourceId, anim);
+          } else {
+            const bitmap = anim.frames[0]!.bitmap;
+            images.current.set(sourceId, { image: bitmap, sourceWidth: anim.width, sourceHeight: anim.height });
+          }
         } catch {
           // an unreadable still simply does not draw; the rest of the frame is unaffected
         }
@@ -312,7 +327,7 @@ export function PreviewPlayer({
        * honest and less alarming; a genuinely empty instant still clears,
        * because then there is no picture layer to wait for.
        */
-      const pictures = layers.map((layer) => pictureFor(layer.item));
+      const pictures = layers.map((layer) => pictureFor(layer.item, layer.timeInItem));
       const waiting = layers.some((layer, i) => needsPicture(layer.item) && !pictures[i]);
       if (waiting) return;
 
@@ -324,13 +339,20 @@ export function PreviewPlayer({
       }
     };
 
-    const pictureFor = (item: VisualItem): LayerPicture | undefined => {
+    const pictureFor = (item: VisualItem, timeInItem = 0): LayerPicture | undefined => {
       if (item.kind === "video") {
         const el = decoders.current.get(item.id);
         if (!el || el.readyState < 2) return undefined;
         return { image: el, sourceWidth: el.videoWidth, sourceHeight: el.videoHeight };
       }
-      if (item.kind === "image") return images.current.get(item.sourceId);
+      if (item.kind === "image") {
+        const anim = animatedImages.current.get(item.sourceId);
+        if (anim) {
+          const frameBitmap = frameForTime(anim, timeInItem);
+          return { image: frameBitmap, sourceWidth: anim.width, sourceHeight: anim.height };
+        }
+        return images.current.get(item.sourceId);
+      }
       return undefined;
     };
 
@@ -342,6 +364,7 @@ export function PreviewPlayer({
   useEffect(() => {
     const decoderMap = decoders.current;
     const imageMap = images.current;
+    const animatedImageMap = animatedImages.current;
     return () => {
       for (const el of decoderMap.values()) {
         el.src = "";
@@ -352,6 +375,10 @@ export function PreviewPlayer({
         if (typeof ImageBitmap !== "undefined" && picture.image instanceof ImageBitmap) picture.image.close();
       }
       imageMap.clear();
+      for (const anim of animatedImageMap.values()) {
+        disposeAnimatedImage(anim);
+      }
+      animatedImageMap.clear();
     };
   }, []);
 

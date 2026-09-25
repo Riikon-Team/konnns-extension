@@ -23,6 +23,14 @@ export const coreGeneralSchema = defineSchema({
     description: "settings.lowPowerDesc",
     default: false,
   },
+  // off by default: stealing focus from the address bar costs one extra page
+  // load and leaves the extension URL showing (features/newtab/search-bar/focus.ts)
+  searchAutofocus: {
+    type: "toggle",
+    label: "settings.searchAutofocus",
+    description: "settings.searchAutofocusDesc",
+    default: false,
+  },
   sidebarMode: {
     type: "select",
     label: "settings.sidebarMode",
@@ -188,6 +196,8 @@ export const coreAppearanceSchema = defineSchema({
     max: 130,
     step: 5,
     default: 100,
+    // rescaling re-lays out the whole page — apply once, on release
+    commitOnRelease: true,
   },
   fontScale: {
     type: "slider",
@@ -197,6 +207,7 @@ export const coreAppearanceSchema = defineSchema({
     max: 130,
     step: 5,
     default: 100,
+    commitOnRelease: true,
   },
   compactMode: {
     type: "toggle",

@@ -1,4 +1,7 @@
+/** limit on the STORED (downscaled/re-encoded) image */
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/** limit on the source file — big 4K/8K PNGs are fine, processImage shrinks them to screen size */
+export const MAX_SOURCE_IMAGE_BYTES = 80 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 150 * 1024 * 1024;
 
 export async function processImage(

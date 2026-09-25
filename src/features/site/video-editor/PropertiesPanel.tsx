@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, RotateCcw, RotateCw, Scissors, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Button, IconButton, Slider, Toggle } from "@/shared/ui";
+import { Button, IconButton, Segmented, Slider, Toggle } from "@/shared/ui";
 import { applyAspect, ASPECT_PRESETS, clampCrop } from "./engine/crop";
 import { fillScalePercent } from "./engine/frameGeometry";
 import {
@@ -267,14 +267,32 @@ function EffectGroups({
       <h3>{t(item.effect === "blur" ? "videoEditor.blurGroup" : "videoEditor.addBox")}</h3>
       <p className="vied__prop-hint">{t("videoEditor.overlayHint")}</p>
 
+      <div className="vied__field">
+        <span>{t("videoEditor.effectMode")}</span>
+        <Segmented
+          value={item.effect === "blur" ? "blur" : "box"}
+          onChange={(val) =>
+            onChange(
+              val === "blur"
+                ? { effect: "blur", strength: item.strength ?? 16 }
+                : { effect: "box", color: item.color ?? "#ffffff" },
+            )
+          }
+          options={[
+            { value: "box", label: t("videoEditor.effectModeOpacity") },
+            { value: "blur", label: t("videoEditor.effectModeBlur") },
+          ]}
+        />
+      </div>
+
       {item.effect === "blur" ? (
         <label className="vied__prop-row">
-          <span>{t("videoEditor.blurStrength", { px: item.strength ?? 12 })}</span>
-          <Slider value={item.strength ?? 12} min={2} max={120} step={1} onChange={(v) => onChange({ strength: v })} />
+          <span>{t("videoEditor.blurStrength", { px: item.strength ?? 16 })}</span>
+          <Slider value={item.strength ?? 16} min={2} max={120} step={1} onChange={(v) => onChange({ strength: v })} />
         </label>
       ) : (
         <label className="vied__swatch">
-          <input type="color" value={item.color ?? "#000000"} onChange={(e) => onChange({ color: e.target.value })} />
+          <input type="color" value={item.color ?? "#ffffff"} onChange={(e) => onChange({ color: e.target.value })} />
           <span>{t("videoEditor.overlayColor")}</span>
         </label>
       )}

@@ -147,10 +147,15 @@
   width: 52px;
   height: 52px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--surface-elevated));
-  color: var(--accent-contrast, #fff);
   flex-shrink: 0;
   box-shadow: var(--shadow-soft);
+}
+
+.contribute-hero__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .contribute-hero__info {

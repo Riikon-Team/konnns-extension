@@ -248,9 +248,8 @@ export function Timeline({
         setMarquee(null);
 
         if (Math.abs(ev.clientX - originX) < 4) {
-          // a click, not a drag: clear the selection and move the playhead
+          // a click, not a drag: clear the selection without moving the playhead
           onSelect([]);
-          onSeek(snap(startContentX / view.pxPerSecond));
           return;
         }
 
@@ -268,7 +267,7 @@ export function Timeline({
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     },
-    [onSeek, onSelect, snap, tool, view.pxPerSecond],
+    [onSelect, tool, view.pxPerSecond],
   );
 
   /* ---------------- render ---------------- */
@@ -409,9 +408,8 @@ export function Timeline({
                 pxPerSecond={view.pxPerSecond}
                 tool={tool}
                 height={ROW_HEIGHT[track.kind]}
-                onSelect={(id, timeAtClick, additive) => {
+                onSelect={(id, _timeAtClick, additive) => {
                   onSelect(additive ? toggleId(selectedIds, id) : [id]);
-                  if (!playing && !additive) onSeek(timeAtClick);
                 }}
                 onDrag={handleItemDrag}
                 onDragCommit={() => onTracksChange(projectRef.current.tracks, true)}

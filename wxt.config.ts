@@ -1,7 +1,9 @@
 import { defineConfig } from "wxt";
 
 export default defineConfig({
-  modules: ["@wxt-dev/module-react"],
+  // auto-icons: generates 16/32/48/128 from src/assets/icon.png (512×512 source)
+  // and greys it out in dev so the dev build is easy to tell apart
+  modules: ["@wxt-dev/module-react", "@wxt-dev/auto-icons"],
   srcDir: "src",
   manifest: {
     name: "My NewTab",

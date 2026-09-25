@@ -1,7 +1,13 @@
 import { create } from "zustand";
 import { db, type WallpaperRow } from "@/core/storage/db";
 import { emit } from "@/core/event-bus";
-import { fetchImageFromUrl, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES, processImage } from "./image";
+import {
+  fetchImageFromUrl,
+  MAX_IMAGE_BYTES,
+  MAX_SOURCE_IMAGE_BYTES,
+  MAX_VIDEO_BYTES,
+  processImage,
+} from "./image";
 
 export interface WallpaperMeta {
   id: string;
@@ -10,6 +16,7 @@ export interface WallpaperMeta {
   size: number;
   createdAt: number;
   lastUsedAt: number;
+  auto?: boolean;
 }
 
 interface WallpaperState {
@@ -18,16 +25,40 @@ interface WallpaperState {
   load: () => Promise<void>;
   addImageFile: (file: File) => Promise<string>;
   addVideoFile: (file: File) => Promise<string>;
-  addFromUrl: (url: string) => Promise<string>;
+  addFromUrl: (url: string, opts?: { auto?: boolean }) => Promise<string>;
   remove: (id: string) => Promise<void>;
   touch: (id: string) => Promise<void>;
   /** delete wallpapers not used in the last 30 days (quick cleanup) */
   cleanup: (keepIds: string[]) => Promise<number>;
+  /** keep only the `keep` newest auto-downloaded wallpapers (plus `keepIds`) */
+  pruneAuto: (keep: number, keepIds: string[]) => Promise<void>;
+  /** flag pre-`auto` Wallhaven downloads ("wallhaven-*" images) as auto, except `keepIds` */
+  adoptLegacyWallhaven: (keepIds: string[]) => Promise<void>;
 }
 
 function toMeta(row: WallpaperRow): WallpaperMeta {
   const { blob: _blob, ...meta } = row;
   return meta;
+}
+
+/** Shrink to screen size first, THEN enforce the storage cap — a 15MB 4K PNG
+ *  ends up as a ~1MB WebP and is perfectly fine to keep. */
+async function imageRow(source: Blob, name: string, auto?: boolean): Promise<WallpaperRow> {
+  if (source.size > MAX_SOURCE_IMAGE_BYTES) throw new Error("image-too-large");
+  const processed = await processImage(source);
+  if (processed.blob.size > MAX_IMAGE_BYTES) throw new Error("image-too-large");
+  return {
+    id: crypto.randomUUID(),
+    type: "image",
+    blob: processed.blob,
+    name,
+    size: processed.blob.size,
+    width: processed.width,
+    height: processed.height,
+    createdAt: Date.now(),
+    lastUsedAt: Date.now(),
+    ...(auto ? { auto: true } : {}),
+  };
 }
 
 export const useWallpaperStore = create<WallpaperState>((set, get) => ({
@@ -40,19 +71,7 @@ export const useWallpaperStore = create<WallpaperState>((set, get) => ({
   },
 
   addImageFile: async (file) => {
-    if (file.size > MAX_IMAGE_BYTES) throw new Error("image-too-large");
-    const processed = await processImage(file);
-    const row: WallpaperRow = {
-      id: crypto.randomUUID(),
-      type: "image",
-      blob: processed.blob,
-      name: file.name,
-      size: processed.blob.size,
-      width: processed.width,
-      height: processed.height,
-      createdAt: Date.now(),
-      lastUsedAt: Date.now(),
-    };
+    const row = await imageRow(file, file.name);
     await db.wallpapers.add(row);
     set({ items: [toMeta(row), ...get().items] });
     return row.id;
@@ -75,21 +94,9 @@ export const useWallpaperStore = create<WallpaperState>((set, get) => ({
     return row.id;
   },
 
-  addFromUrl: async (url) => {
+  addFromUrl: async (url, opts) => {
     const blob = await fetchImageFromUrl(url);
-    if (blob.size > MAX_IMAGE_BYTES) throw new Error("image-too-large");
-    const processed = await processImage(blob);
-    const row: WallpaperRow = {
-      id: crypto.randomUUID(),
-      type: "image",
-      blob: processed.blob,
-      name: url.split("/").pop() ?? "url-image",
-      size: processed.blob.size,
-      width: processed.width,
-      height: processed.height,
-      createdAt: Date.now(),
-      lastUsedAt: Date.now(),
-    };
+    const row = await imageRow(blob, url.split("/").pop() ?? "url-image", opts?.auto);
     await db.wallpapers.add(row);
     set({ items: [toMeta(row), ...get().items] });
     return row.id;
@@ -112,6 +119,31 @@ export const useWallpaperStore = create<WallpaperState>((set, get) => ({
     set({ items: get().items.filter((i) => !stale.some((s) => s.id === i.id)) });
     return stale.length;
   },
+
+  pruneAuto: async (keep, keepIds) => {
+    // query the DB, not `items` — the new-tab layer never loads the full library
+    const autoIds = await db.wallpapers
+      .orderBy("createdAt")
+      .reverse()
+      .filter((r) => r.auto === true)
+      .primaryKeys();
+    const doomed = autoIds.slice(keep).filter((id) => !keepIds.includes(id));
+    if (doomed.length === 0) return;
+    await db.wallpapers.bulkDelete(doomed);
+    set({ items: get().items.filter((i) => !doomed.includes(i.id)) });
+  },
+
+  adoptLegacyWallhaven: async (keepIds) => {
+    await db.wallpapers
+      .filter(
+        (r) =>
+          r.type === "image" &&
+          r.auto !== true &&
+          /^wallhaven-/i.test(r.name) &&
+          !keepIds.includes(r.id),
+      )
+      .modify({ auto: true });
+  },
 }));
 
 /** Load a wallpaper blob as an object URL (caller revokes). */
@@ -119,4 +151,16 @@ export async function getWallpaperUrl(id: string): Promise<{ url: string; type: 
   const row = await db.wallpapers.get(id);
   if (!row) return null;
   return { url: URL.createObjectURL(row.blob), type: row.type };
+}
+
+/** i18n key for an error thrown by this store */
+export function wallpaperErrorKey(err: unknown): string {
+  const msg = err instanceof Error ? err.message : "";
+  if (msg === "image-too-large") return "wallpaper.imageTooLarge";
+  if (msg === "video-too-large") return "wallpaper.videoTooLarge";
+  return "wallpaper.loadUrlError";
+}
+
+export async function wallpaperExists(id: string): Promise<boolean> {
+  return (await db.wallpapers.where("id").equals(id).count()) > 0;
 }

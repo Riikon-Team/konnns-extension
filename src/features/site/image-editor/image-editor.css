@@ -1135,6 +1135,14 @@
   gap: var(--space-1);
 }
 
+.ied__export-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* ---------- canvas size menu & property bar ---------- */
 .ied__canvas-size-btn {
   font-family: var(--font-mono);

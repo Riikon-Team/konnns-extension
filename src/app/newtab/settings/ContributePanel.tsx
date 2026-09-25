@@ -6,7 +6,6 @@ import {
   GitCommit,
   Github,
   HeartHandshake,
-  Sparkles,
   Star,
   Tag,
   Users,
@@ -55,7 +54,30 @@ interface ReleaseItem {
   version: string;
   date: string;
   isLatest?: boolean;
-  items: string[];
+  items?: string[];
+  /** raw markdown release notes (GitHub) — wins over `items` */
+  body?: string;
+}
+
+function releaseMarkdown(rel: ReleaseItem): string {
+  return rel.body?.trim() || (rel.items ?? []).map((it) => `- ${it}`).join("\n");
+}
+
+type MarkdownRenderer = (source: string) => string;
+
+/** markdown-it + DOMPurify are loaded on demand — only this panel needs them */
+function useMarkdownRenderer(): MarkdownRenderer | null {
+  const [render, setRender] = useState<MarkdownRenderer | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void import("@/shared/utils/renderMarkdown").then((m) => {
+      if (alive) setRender(() => m.renderMarkdown);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return render;
 }
 
 const FALLBACK_CONTRIBUTORS: Contributor[] = [
@@ -163,6 +185,7 @@ export function ContributePanel() {
   const [loadingContributors, setLoadingContributors] = useState(true);
   const [loadingCommits, setLoadingCommits] = useState(true);
   const [viewMode, setViewMode] = useState<"releases" | "commits">("releases");
+  const renderMd = useMarkdownRenderer();
 
   useEffect(() => {
     try {
@@ -214,18 +237,13 @@ export function ContributePanel() {
         if (res.ok) {
           const data: { tag_name?: string; name?: string; published_at?: string; body?: string }[] = await res.json();
           if (!cancelled && Array.isArray(data) && data.length > 0) {
-            const mapped: ReleaseItem[] = data.map((r, idx) => {
-              const bodyLines = (r.body || "")
-                .split("\n")
-                .map((l: string) => l.trim().replace(/^[-*•]\s*/, ""))
-                .filter((l: string) => l.length > 0);
-              return {
-                version: r.tag_name || r.name || "Release",
-                date: r.published_at ? r.published_at.split("T")[0] : "",
-                isLatest: idx === 0,
-                items: bodyLines.length > 0 ? bodyLines : [r.name || t("settings.newUpdate", "Cập nhật mới")],
-              };
-            });
+            const mapped: ReleaseItem[] = data.map((r, idx) => ({
+              version: r.tag_name || r.name || "Release",
+              date: r.published_at ? r.published_at.split("T")[0] : "",
+              isLatest: idx === 0,
+              body: r.body?.trim() || undefined,
+              items: [r.name || t("settings.newUpdate", "Cập nhật mới")],
+            }));
             setRemoteReleases(mapped);
           }
         }
@@ -257,7 +275,7 @@ export function ContributePanel() {
     <div className="contribute-panel">
       <div className="contribute-hero">
         <div className="contribute-hero__icon-wrap">
-          <Sparkles size={28} className="contribute-hero__icon" />
+          <img src="icons\128.png" alt="My NewTab Icon" className="contribute-hero__icon" />
         </div>
         <div className="contribute-hero__info">
           <div className="contribute-hero__title-row">
@@ -394,13 +412,15 @@ export function ContributePanel() {
                     )}
                     <span className="contribute-timeline__date">{formatDate(rel.date)}</span>
                   </div>
-                  <ul className="contribute-timeline__list">
-                    {rel.items.map((it, idx) => (
-                      <li key={idx} className="contribute-timeline__li">
-                        {it}
-                      </li>
-                    ))}
-                  </ul>
+                  {renderMd ? (
+                    <div
+                      className="contribute-md"
+                      // sanitized by DOMPurify inside renderMarkdown
+                      dangerouslySetInnerHTML={{ __html: renderMd(releaseMarkdown(rel)) }}
+                    />
+                  ) : (
+                    <div className="contribute-md contribute-md--plain">{releaseMarkdown(rel)}</div>
+                  )}
                 </div>
               </div>
             ))}

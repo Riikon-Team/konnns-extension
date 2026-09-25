@@ -26,6 +26,8 @@ export interface WallpaperRow {
   height?: number;
   createdAt: number;
   lastUsedAt: number;
+  /** downloaded automatically (random-on-open) — pruned, never user-picked */
+  auto?: boolean;
 }
 
 export interface AvatarRow {

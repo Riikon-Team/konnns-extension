@@ -16,8 +16,9 @@ export function itemFromSource(source: MediaSource, start: number): TrackItem {
     return { kind: "audio", id, sourceId: source.id, start, offset: 0, duration: source.duration, gainDb: 0, fadeIn: 0, fadeOut: 0 };
   }
   if (source.mediaKind === "image") {
-    // a still has no length of its own, so it gets a default one to be trimmed
-    return { kind: "image", id, sourceId: source.id, start, duration: DEFAULT_IMAGE_DURATION };
+    // a still has no length of its own, so it gets a default one to be trimmed;
+    // an animated image gets its loop length as initial duration
+    return { kind: "image", id, sourceId: source.id, start, duration: source.duration || DEFAULT_IMAGE_DURATION };
   }
   // a file with no audio track starts with nothing to un-mute
   return { kind: "video", id, sourceId: source.id, start, offset: 0, duration: source.duration, keepOwnAudio: source.hasAudio !== false };

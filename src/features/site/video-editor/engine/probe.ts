@@ -1,4 +1,5 @@
 import { DEFAULT_IMAGE_DURATION, type MediaKind, type MediaSource } from "./model";
+import { decodeAnimatedImage, disposeAnimatedImage } from "./animatedImage";
 
 /**
  * Reads just enough metadata to put a file in the media bin. mediabunny opens
@@ -41,8 +42,11 @@ export async function probeMedia(file: File): Promise<Omit<MediaSource, "id">> {
   if (!mediaKind) throw new Error("videoEditor.errUnsupportedFile");
 
   if (mediaKind === "image") {
-    const size = await probeImage(file);
-    return { fileName: file.name, mediaKind, duration: DEFAULT_IMAGE_DURATION, ...size, hasAudio: false };
+    const anim = await decodeAnimatedImage(file);
+    const duration = anim.totalDuration > 0 ? anim.totalDuration : DEFAULT_IMAGE_DURATION;
+    const size = { width: anim.width, height: anim.height };
+    disposeAnimatedImage(anim);
+    return { fileName: file.name, mediaKind, duration, ...size, hasAudio: false };
   }
 
   const { Input, ALL_FORMATS, BlobSource } = await import("mediabunny");
@@ -63,13 +67,6 @@ export async function probeMedia(file: File): Promise<Omit<MediaSource, "id">> {
   } finally {
     input.dispose();
   }
-}
-
-async function probeImage(file: File): Promise<{ width: number; height: number }> {
-  const bitmap = await createImageBitmap(file);
-  const size = { width: bitmap.width, height: bitmap.height };
-  bitmap.close();
-  return size;
 }
 
 /**

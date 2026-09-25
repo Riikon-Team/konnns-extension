@@ -10,14 +10,19 @@ export function ExportMenu({ canvasRef, projectName }: { canvasRef: React.RefObj
   const [format, setFormat] = useState<"png" | "jpeg">("png");
   const [transparent, setTransparent] = useState(true);
   const [quality, setQuality] = useState(92);
+  const [scale, setScale] = useState<number>(1);
   const [copying, setCopying] = useState(false);
   const [copied, setCopied] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
 
+  const dims = canvasRef.current?.getCanvasSize() ?? { width: 0, height: 0 };
+  const outW = Math.round(dims.width * scale);
+  const outH = Math.round(dims.height * scale);
+
   const run = () => {
     const api = canvasRef.current;
     if (!api) return;
-    const url = api.exportDataURL(format, quality / 100, transparent);
+    const url = api.exportDataURL(format, quality / 100, transparent, scale);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${(projectName || t("imageEditor.untitled")).replace(/[<>:"|?*/\\]+/g, "-")}.${format === "jpeg" ? "jpg" : "png"}`;
@@ -33,7 +38,7 @@ export function ExportMenu({ canvasRef, projectName }: { canvasRef: React.RefObj
       // ClipboardItem only supports "image/png" in standard browser implementations.
       // If user selected JPEG, export PNG without transparency to preserve intended opaque look.
       const isTransparent = format === "png" && transparent;
-      const dataUrl = api.exportDataURL("png", 1, isTransparent);
+      const dataUrl = api.exportDataURL("png", 1, isTransparent, scale);
       const res = await fetch(dataUrl);
       const blob = await res.blob();
       await navigator.clipboard.write([
@@ -70,6 +75,22 @@ export function ExportMenu({ canvasRef, projectName }: { canvasRef: React.RefObj
                 { value: "jpeg", label: "JPEG" },
               ]}
             />
+            <div className="ied__export-row ied__export-row--col">
+              <div className="ied__export-label">
+                <span>{t("imageEditor.exportScale")}</span>
+                {outW > 0 && outH > 0 && <span>{outW} × {outH}</span>}
+              </div>
+              <Segmented
+                value={String(scale)}
+                onChange={(v) => setScale(Number(v))}
+                options={[
+                  { value: "0.5", label: "0.5x" },
+                  { value: "1", label: "1x" },
+                  { value: "2", label: "2x" },
+                  { value: "3", label: "3x" },
+                ]}
+              />
+            </div>
             {format === "png" ? (
               <label className="ied__export-row">
                 <Toggle checked={transparent} onChange={setTransparent} />

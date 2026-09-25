@@ -811,3 +811,51 @@ html[data-low-power="true"] .ui-skeleton {
   background: var(--accent);
   color: var(--accent-contrast);
 }
+
+/* ---------- Check chips (multiselect settings field) ---------- */
+.ui-checkchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ui-checkchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--dur-hover) ease-out,
+    border-color var(--dur-hover) ease-out,
+    color var(--dur-hover) ease-out;
+}
+
+.ui-checkchip:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+}
+
+.ui-checkchip input {
+  margin: 0;
+  width: 13px;
+  height: 13px;
+  accent-color: var(--accent);
+  cursor: inherit;
+}
+
+.ui-checkchip--on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+
+.ui-checkchip:has(input:disabled) {
+  cursor: not-allowed;
+}

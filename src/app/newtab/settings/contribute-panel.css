@@ -28,6 +28,13 @@
   box-shadow: var(--shadow-soft);
 }
 
+.contribute-hero__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .contribute-hero__info {
   flex: 1;
   min-width: 0;
@@ -255,6 +262,7 @@
 
 .contribute-timeline__content {
   flex: 1;
+  min-width: 0;
   padding-bottom: var(--space-4);
 }
 
@@ -299,6 +307,142 @@
 
 .contribute-timeline__li {
   line-height: 1.45;
+}
+
+/* Release notes (markdown). Headings are kept deliberately small (14→11px)
+   so a "# Title" in a GitHub release can't blow up the timeline layout. */
+.contribute-md {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.contribute-md--plain {
+  white-space: pre-wrap;
+}
+
+.contribute-md > :first-child {
+  margin-top: 0;
+}
+
+.contribute-md > :last-child {
+  margin-bottom: 0;
+}
+
+.contribute-md h1,
+.contribute-md h2,
+.contribute-md h3,
+.contribute-md h4,
+.contribute-md h5,
+.contribute-md h6 {
+  margin: 10px 0 4px;
+  color: var(--text);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.contribute-md h1 { font-size: 14px; }
+.contribute-md h2 { font-size: 13px; }
+.contribute-md h3 { font-size: 12px; }
+.contribute-md h4,
+.contribute-md h5,
+.contribute-md h6 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.contribute-md p {
+  margin: 4px 0;
+}
+
+.contribute-md ul,
+.contribute-md ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.contribute-md li {
+  margin: 2px 0;
+}
+
+.contribute-md li::marker {
+  color: var(--accent);
+}
+
+.contribute-md a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.contribute-md a:hover {
+  text-decoration: underline;
+}
+
+.contribute-md strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.contribute-md code {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.contribute-md pre {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.contribute-md pre code {
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.contribute-md blockquote {
+  margin: 6px 0;
+  padding: 2px 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+}
+
+.contribute-md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 8px 0;
+}
+
+.contribute-md img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+.contribute-md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.contribute-md th,
+.contribute-md td {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
 }
 
 .contribute-commits {

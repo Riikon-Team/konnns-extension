@@ -157,6 +157,22 @@ function drawText(ctx: CanvasRenderingContext2D, item: TextItem, alpha: number):
  * It also means the rect needs no source-space mapping — it is already in
  * the same output pixels the canvas is.
  */
+let scratchBlurCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+let scratchBlurCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
+
+function getScratchCanvas(width: number, height: number): { canvas: HTMLCanvasElement | OffscreenCanvas; ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D } | null {
+  if (typeof document === "undefined" && typeof OffscreenCanvas === "undefined") return null;
+  if (!scratchBlurCanvas || scratchBlurCanvas.width !== width || scratchBlurCanvas.height !== height) {
+    scratchBlurCanvas = typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(width, height)
+      : document.createElement("canvas");
+    scratchBlurCanvas.width = width;
+    scratchBlurCanvas.height = height;
+    scratchBlurCtx = scratchBlurCanvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  }
+  return scratchBlurCtx ? { canvas: scratchBlurCanvas, ctx: scratchBlurCtx } : null;
+}
+
 function drawEffect(ctx: CanvasRenderingContext2D, item: EffectItem, outputWidth: number, outputHeight: number): void {
   const { rect } = item;
   if (rect.width <= 0 || rect.height <= 0) return;
@@ -172,11 +188,23 @@ function drawEffect(ctx: CanvasRenderingContext2D, item: EffectItem, outputWidth
     return;
   }
 
-  ctx.beginPath();
-  ctx.rect(rect.left, rect.top, rect.width, rect.height);
-  ctx.clip();
-  ctx.filter = `blur(${Math.max(1, item.strength ?? 12)}px)`;
-  ctx.drawImage(ctx.canvas, 0, 0, outputWidth, outputHeight);
+  const scratch = getScratchCanvas(outputWidth, outputHeight);
+  if (scratch) {
+    scratch.ctx.clearRect(0, 0, outputWidth, outputHeight);
+    scratch.ctx.drawImage(ctx.canvas, 0, 0, outputWidth, outputHeight);
+
+    ctx.beginPath();
+    ctx.rect(rect.left, rect.top, rect.width, rect.height);
+    ctx.clip();
+    ctx.filter = `blur(${Math.max(1, item.strength ?? 12)}px)`;
+    ctx.drawImage(scratch.canvas as CanvasImageSource, 0, 0, outputWidth, outputHeight);
+  } else {
+    ctx.beginPath();
+    ctx.rect(rect.left, rect.top, rect.width, rect.height);
+    ctx.clip();
+    ctx.filter = `blur(${Math.max(1, item.strength ?? 12)}px)`;
+    ctx.drawImage(ctx.canvas, 0, 0, outputWidth, outputHeight);
+  }
   ctx.restore();
 }
 

@@ -4,10 +4,10 @@ import { useTranslation } from "react-i18next";
 import { Button, IconButton, TextInput } from "@/shared/ui";
 import { useFeatureValues, useSettingsStore } from "@/core/settings-engine/settingsStore";
 import { estimateStorage } from "@/core/storage/db";
-import { useWallpaperStore, type WallpaperMeta } from "./store";
+import { useWallpaperStore, wallpaperErrorKey, type WallpaperMeta } from "./store";
 import { getWallpaperUrl } from "./store";
 import { MAX_VIDEO_BYTES } from "./image";
-import { fetchRandomWallhavenWallpaper, type Wallpaper } from "./wallhaven";
+import { fetchRandomWallhavenWallpaper, wallhavenOptionsFrom, type Wallpaper } from "./wallhaven";
 import { WallhavenModal } from "./WallhavenModal";
 
 const FEATURE_ID = "wallpaper";
@@ -88,12 +88,7 @@ export function WallpaperManager() {
 
   const setActive = (id: string) => setValue(FEATURE_ID, "activeId", id);
 
-  const onError = (err: unknown) => {
-    const msg = err instanceof Error ? err.message : "";
-    if (msg === "image-too-large") setError(t("wallpaper.imageTooLarge"));
-    else if (msg === "video-too-large") setError(t("wallpaper.videoTooLarge"));
-    else setError(t("wallpaper.loadUrlError"));
-  };
+  const onError = (err: unknown) => setError(t(wallpaperErrorKey(err)));
 
   return (
     <div className="wp-manager">
@@ -120,7 +115,7 @@ export function WallpaperManager() {
           onClick={async () => {
             setError(null);
             try {
-              const wp = await fetchRandomWallhavenWallpaper();
+              const wp = await fetchRandomWallhavenWallpaper(wallhavenOptionsFrom(values));
               if (wp) {
                 setActive(await addFromUrl(wp.path));
               } else {

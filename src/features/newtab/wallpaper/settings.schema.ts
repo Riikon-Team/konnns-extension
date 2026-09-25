@@ -1,4 +1,5 @@
 import { defineSchema } from "@/core/settings-engine/schema";
+import { DEFAULT_TOPIC_IDS, DEFAULT_WALLHAVEN_KEEP, WALLHAVEN_TOPICS } from "./wallhaven";
 
 export const wallpaperSettingsSchema = defineSchema({
   mode: {
@@ -45,18 +46,40 @@ export const wallpaperSettingsSchema = defineSchema({
     default: "wallhaven",
     showIf: (v) => v.mode !== "slideshow",
   },
-  wallhavenTopic: {
+  wallhavenTopics: {
+    type: "multiselect",
+    label: "wallpaper.wallhavenTopics",
+    description: "wallpaper.wallhavenTopicsDesc",
+    options: WALLHAVEN_TOPICS.map((tp) => ({
+      value: tp.id,
+      label: `wallpaper.topics.${tp.id}`,
+      icon: tp.icon,
+    })),
+    default: DEFAULT_TOPIC_IDS,
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  wallhavenRefresh: {
     type: "select",
-    label: "wallpaper.wallhavenTopic",
-    description: "wallpaper.wallhavenTopicDesc",
+    label: "wallpaper.wallhavenRefresh",
+    description: "wallpaper.wallhavenRefreshDesc",
     options: [
-      { value: "all", label: "wallpaper.topicAll" },
-      { value: "space", label: "wallpaper.topicSpace" },
-      { value: "forest", label: "wallpaper.topicForest" },
-      { value: "city", label: "wallpaper.topicCity" },
-      { value: "landscape", label: "wallpaper.topicLandscape" },
+      { value: "0", label: "wallpaper.refreshEveryTab" },
+      { value: "30", label: "wallpaper.refresh30m" },
+      { value: "60", label: "wallpaper.refresh1h" },
+      { value: "360", label: "wallpaper.refresh6h" },
+      { value: "1440", label: "wallpaper.refresh1d" },
     ],
-    default: "all",
+    default: "60",
+    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
+  },
+  wallhavenKeep: {
+    type: "slider",
+    label: "wallpaper.wallhavenKeep",
+    description: "wallpaper.wallhavenKeepDesc",
+    min: 1,
+    max: 20,
+    step: 1,
+    default: DEFAULT_WALLHAVEN_KEEP,
     showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
   },
   wallhavenResolution: {
@@ -67,18 +90,6 @@ export const wallpaperSettingsSchema = defineSchema({
       { value: "3840x2160", label: "4K UHD (3840x2160+)" },
     ],
     default: "2560x1440",
-    showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
-  },
-  wallhavenCategory: {
-    type: "select",
-    label: "wallpaper.wallhavenCategory",
-    options: [
-      { value: "all", label: "wallpaper.catAll" },
-      { value: "general", label: "wallpaper.catGeneral" },
-      { value: "anime", label: "wallpaper.catAnime" },
-      { value: "people", label: "wallpaper.catPeople" },
-    ],
-    default: "all",
     showIf: (v) => v.randomMode === "wallhaven" && v.mode !== "slideshow",
   },
   wallhavenCustomQuery: {

@@ -77,7 +77,7 @@ export interface EditorCanvasHandle {
   setLayerLocked: (id: string, v: boolean) => void;
   setLayerName: (id: string, name: string) => void;
   moveLayer: (id: string, panelIndex: number) => void;
-  exportDataURL: (format: "png" | "jpeg", quality: number, transparent: boolean) => string;
+  exportDataURL: (format: "png" | "jpeg", quality: number, transparent: boolean, multiplier?: number) => string;
   getSnapshot: () => FabricCanvasJson;
   addImageFromDataURL: (dataURL: string) => Promise<void>;
   setCanvasSize: (width: number, height: number) => void;
@@ -1119,13 +1119,13 @@ export const EditorCanvas = forwardRef<
       if (fabricRef.current) moveLayerToPanelIndex(fabricRef.current, id, panelIndex);
       afterChange();
     },
-    exportDataURL: (format, quality, transparent) => {
+    exportDataURL: (format, quality, transparent, multiplier = 1) => {
       const canvas = fabricRef.current;
       if (!canvas) return "";
       const prevBg = canvas.backgroundColor;
       if (format === "png" && transparent) canvas.set({ backgroundColor: "" });
       canvas.requestRenderAll();
-      const url = canvas.toDataURL({ format, quality, multiplier: 1 });
+      const url = canvas.toDataURL({ format, quality, multiplier: multiplier || 1 });
       canvas.set({ backgroundColor: prevBg });
       canvas.requestRenderAll();
       return url;

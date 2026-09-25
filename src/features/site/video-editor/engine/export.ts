@@ -4,6 +4,7 @@ import { resolveVisual, type ImageItem, type VideoItem, type VideoProject } from
 import { getSourceBlob } from "./store";
 import { projectDuration } from "./tracks";
 import { buildMixdown } from "./mixdown";
+import { decodeAnimatedImage, disposeAnimatedImage, frameForTime, type AnimatedImage } from "./animatedImage";
 
 /** Encoders reject odd dimensions on most H.264 profiles. */
 function even(n: number): number {
@@ -97,6 +98,17 @@ async function exportSingleItem(
   const width = options.width || project.outputWidth || undefined;
   const height = options.height || project.outputHeight || undefined;
 
+  const track = await input.getPrimaryVideoTrack();
+  const metrics = track ? await track.computeFrameRateMetrics({ targetPacketCount: 64 }) : null;
+  const sourceFps = metrics?.bestGuessFrameRate ?? null;
+  // If the user selected a target framerate that already matches the source clip
+  // (e.g. source is 60fps and user picked 60fps), don't pass frameRate to Mediabunny
+  // so that it can take the lossless, instant packet-copy path when quality is "source".
+  const targetFps =
+    options.frameRate && (!sourceFps || Math.abs(sourceFps - options.frameRate) >= 0.5)
+      ? options.frameRate
+      : undefined;
+
   const conversion = await mb.Conversion.init({
     input,
     output,
@@ -107,7 +119,7 @@ async function exportSingleItem(
       width,
       height,
       fit: width && height ? "contain" : undefined,
-      frameRate: options.frameRate || undefined,
+      frameRate: targetFps,
       // "source" means keep the incoming bitrate, which is what copying
       // packets already does — so only the other two force a re-encode
       ...(options.quality && options.quality !== "source" ? { quality: qualityFor(mb, options.quality) } : {}),
@@ -138,6 +150,7 @@ async function exportSingleItem(
 interface VideoFeedEntry {
   iterator: AsyncIterator<import("mediabunny").VideoSample>;
   current: import("mediabunny").VideoSample | null;
+  peek: import("mediabunny").VideoSample | null;
   width: number;
   height: number;
   input: import("mediabunny").Input;
@@ -153,6 +166,7 @@ interface VideoFeedEntry {
 class PictureFeed {
   private videos = new Map<string, VideoFeedEntry>();
   private images = new Map<string, LayerPicture>();
+  private animatedImages = new Map<string, AnimatedImage>();
 
   constructor(private mb: Mediabunny) {}
 
@@ -169,45 +183,100 @@ class PictureFeed {
     }
     const sink = new this.mb.VideoSampleSink(track);
     const iterator = sink.samples(item.offset, item.offset + item.duration)[Symbol.asyncIterator]();
-    this.videos.set(item.id, { iterator, current: null, width: track.displayWidth, height: track.displayHeight, input });
+    this.videos.set(item.id, {
+      iterator,
+      current: null,
+      peek: null,
+      width: track.displayWidth,
+      height: track.displayHeight,
+      input,
+    });
   }
 
   async openImage(item: ImageItem): Promise<void> {
-    if (this.images.has(item.id)) return;
+    if (this.images.has(item.id) || this.animatedImages.has(item.id)) return;
     const blob = await getSourceBlob(item.sourceId);
     if (!blob) return;
-    const bitmap = await createImageBitmap(blob);
-    this.images.set(item.id, { image: bitmap, sourceWidth: bitmap.width, sourceHeight: bitmap.height });
+    const anim = await decodeAnimatedImage(blob);
+    if (anim.frames.length > 1) {
+      this.animatedImages.set(item.id, anim);
+    } else {
+      const bitmap = anim.frames[0]!.bitmap;
+      this.images.set(item.id, { image: bitmap, sourceWidth: anim.width, sourceHeight: anim.height });
+    }
   }
 
   /** The frame of `item` covering `sourceTime`, advancing that item's decoder up to it. */
   async pictureFor(item: VideoItem | ImageItem, sourceTime: number): Promise<LayerPicture | undefined> {
-    if (item.kind === "image") return this.images.get(item.id);
+    if (item.kind === "image") {
+      const anim = this.animatedImages.get(item.id);
+      if (anim) {
+        const frame = frameForTime(anim, sourceTime);
+        return { image: frame, sourceWidth: anim.width, sourceHeight: anim.height };
+      }
+      return this.images.get(item.id);
+    }
 
     const entry = this.videos.get(item.id);
     if (!entry) return undefined;
 
-    // walk forward until the held sample covers the requested instant
-    while (!entry.current || entry.current.timestamp + entry.current.duration <= sourceTime) {
+    if (!entry.current) {
       const next = await entry.iterator.next();
-      if (next.done) break;
-      entry.current?.close();
+      if (next.done) return undefined;
       entry.current = next.value;
     }
-    if (!entry.current) return undefined;
+
+    if (!entry.peek) {
+      const next = await entry.iterator.next();
+      if (!next.done) {
+        entry.peek = next.value;
+      }
+    }
+
+    const EPS = 1e-6;
+
+    // Walk forward using midpoint lookahead: advance when sourceTime is at or past the
+    // midpoint between the current frame's presentation timestamp and the next frame's.
+    // This solves the severe micro-stutter/lag caused by integer timescale jitter (90kHz / 1kHz)
+    // and WebCodecs zero-duration samples, delivering perfectly smooth 1:1 or 2:2 frame cadence.
+    while (entry.peek) {
+      if (entry.peek.timestamp <= entry.current.timestamp) {
+        entry.current.close();
+        entry.current = entry.peek;
+        const next = await entry.iterator.next();
+        entry.peek = next.done ? null : next.value;
+        continue;
+      }
+
+      const midpoint = (entry.current.timestamp + entry.peek.timestamp) / 2;
+      if (sourceTime + EPS < midpoint) {
+        break;
+      }
+
+      entry.current.close();
+      entry.current = entry.peek;
+      const next = await entry.iterator.next();
+      entry.peek = next.done ? null : next.value;
+    }
+
     return { image: entry.current.toCanvasImageSource(), sourceWidth: entry.width, sourceHeight: entry.height };
   }
 
   dispose(): void {
     for (const entry of this.videos.values()) {
       entry.current?.close();
+      entry.peek?.close();
       entry.input.dispose();
     }
     for (const picture of this.images.values()) {
       if (typeof ImageBitmap !== "undefined" && picture.image instanceof ImageBitmap) picture.image.close();
     }
+    for (const anim of this.animatedImages.values()) {
+      disposeAnimatedImage(anim);
+    }
     this.videos.clear();
     this.images.clear();
+    this.animatedImages.clear();
   }
 }
 
@@ -223,7 +292,34 @@ async function exportComposite(
 
   const outW = even(options.width || project.outputWidth || 1920);
   const outH = even(options.height || project.outputHeight || 1080);
-  const fps = options.frameRate || 30;
+
+  // If no frameRate was explicitly chosen (i.e. "Source" / 0), inspect the primary video track
+  // to preserve native 60fps/50fps/etc. instead of blindly falling back to 30fps.
+  let fps = options.frameRate || 0;
+  if (!fps) {
+    const firstVideo = project.tracks
+      .flatMap((t) => t.items)
+      .find((it): it is VideoItem => it.kind === "video");
+    if (firstVideo) {
+      const blob = await getSourceBlob(firstVideo.sourceId);
+      if (blob) {
+        const input = new mb.Input({ formats: mb.ALL_FORMATS, source: new mb.BlobSource(blob) });
+        try {
+          const track = await input.getPrimaryVideoTrack();
+          if (track) {
+            const metrics = await track.computeFrameRateMetrics({ targetPacketCount: 64 });
+            if (metrics.bestGuessFrameRate > 0) fps = Math.round(metrics.bestGuessFrameRate);
+          }
+        } catch {
+          // ignore detection error
+        } finally {
+          input.dispose();
+        }
+      }
+    }
+  }
+  if (!fps) fps = 30;
+  fps = Math.min(60, Math.max(15, fps));
 
   const videoCodec = await mb.getFirstEncodableVideoCodec(outputFormat.getSupportedVideoCodecs(), { width: outW, height: outH });
   if (!videoCodec) throw new Error("videoEditor.errNoVideoCodec");
@@ -302,6 +398,6 @@ async function exportComposite(
 async function pictureForLayer(feed: PictureFeed, layer: Layer): Promise<LayerPicture | undefined> {
   const { item, timeInItem } = layer;
   if (item.kind === "video") return feed.pictureFor(item, item.offset + timeInItem);
-  if (item.kind === "image") return feed.pictureFor(item, 0);
+  if (item.kind === "image") return feed.pictureFor(item, timeInItem);
   return undefined;
 }

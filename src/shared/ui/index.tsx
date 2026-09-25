@@ -163,27 +163,55 @@ export function Slider({
   min,
   max,
   step = 1,
+  commitOnRelease = false,
 }: {
   value: number;
   onChange: (value: number) => void;
   min: number;
   max: number;
   step?: number;
+  /**
+   * Only call onChange when the drag ends (pointer up / key up / blur).
+   * For values that are expensive to apply live — e.g. UI scale re-lays out
+   * the whole page on every step.
+   */
+  commitOnRelease?: boolean;
 }) {
+  const [draft, setDraft] = React.useState<number | null>(null);
+  // a ref too: pointerup can fire before React has re-rendered the last input
+  const draftRef = useRef<number | null>(null);
+  const shown = draft ?? value;
+
+  const commit = () => {
+    const next = draftRef.current;
+    if (next === null) return;
+    draftRef.current = null;
+    setDraft(null);
+    if (next !== value) onChange(next);
+  };
+
   return (
     <div className="ui-slider__row">
       <input
         type="range"
         className="ui-slider"
-        value={value}
+        value={shown}
         min={min}
         max={max}
         step={step}
-        onChange={(e) => onChange(Number(e.target.value))}
-        title={`${value}`}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (!commitOnRelease) return onChange(v);
+          draftRef.current = v;
+          setDraft(v);
+        }}
+        onPointerUp={commitOnRelease ? commit : undefined}
+        onKeyUp={commitOnRelease ? commit : undefined}
+        onBlur={commitOnRelease ? commit : undefined}
+        title={`${shown}`}
       />
       <div className="ui-slider__value">
-        {value}
+        {shown}
       </div>
     </div>
   );

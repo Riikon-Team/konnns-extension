@@ -4,6 +4,7 @@ import { clearFrame, drawLayer, type LayerPicture } from "./layerRender";
 import { getSourceBlob } from "./store";
 import { projectDuration } from "./tracks";
 import type { VideoProject } from "./model";
+import { decodeAnimatedImage, disposeAnimatedImage, frameForTime, type AnimatedImage } from "./animatedImage";
 
 /**
  * GIF export — docs/roadmap/08-video-editor.md §5. mediabunny has no GIF
@@ -106,6 +107,7 @@ export async function exportGif(
 async function openPictures(project: VideoProject) {
   const videos = new Map<string, { el: HTMLVideoElement; url: string; width: number; height: number }>();
   const images = new Map<string, LayerPicture>();
+  const animatedImages = new Map<string, AnimatedImage>();
 
   for (const track of project.tracks) {
     if (track.hidden) continue;
@@ -113,9 +115,14 @@ async function openPictures(project: VideoProject) {
       const blob = item.kind === "video" || item.kind === "image" ? await getSourceBlob(item.sourceId) : null;
       if (!blob) continue;
 
-      if (item.kind === "image" && !images.has(item.sourceId)) {
-        const bitmap = await createImageBitmap(blob);
-        images.set(item.sourceId, { image: bitmap, sourceWidth: bitmap.width, sourceHeight: bitmap.height });
+      if (item.kind === "image" && !images.has(item.sourceId) && !animatedImages.has(item.sourceId)) {
+        const anim = await decodeAnimatedImage(blob);
+        if (anim.frames.length > 1) {
+          animatedImages.set(item.sourceId, anim);
+        } else {
+          const bitmap = anim.frames[0]!.bitmap;
+          images.set(item.sourceId, { image: bitmap, sourceWidth: anim.width, sourceHeight: anim.height });
+        }
       } else if (item.kind === "video" && !videos.has(item.sourceId)) {
         const url = URL.createObjectURL(blob);
         const el = document.createElement("video");
@@ -133,7 +140,14 @@ async function openPictures(project: VideoProject) {
   return {
     async at(layer: Layer): Promise<LayerPicture | undefined> {
       const item = layer.item;
-      if (item.kind === "image") return images.get(item.sourceId);
+      if (item.kind === "image") {
+        const anim = animatedImages.get(item.sourceId);
+        if (anim) {
+          const frame = frameForTime(anim, layer.timeInItem);
+          return { image: frame, sourceWidth: anim.width, sourceHeight: anim.height };
+        }
+        return images.get(item.sourceId);
+      }
       if (item.kind !== "video") return undefined;
 
       const entry = videos.get(item.sourceId);
@@ -158,6 +172,10 @@ async function openPictures(project: VideoProject) {
       for (const picture of images.values()) {
         if (typeof ImageBitmap !== "undefined" && picture.image instanceof ImageBitmap) picture.image.close();
       }
+      for (const anim of animatedImages.values()) {
+        disposeAnimatedImage(anim);
+      }
+      animatedImages.clear();
     },
   };
 }

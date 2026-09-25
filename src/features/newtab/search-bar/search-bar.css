@@ -1,4 +1,5 @@
 .search-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -61,4 +62,118 @@
 }
 .search-bar__engine svg {
   flex-shrink: 0;
+}
+
+/* ---------- bang indicator ("!yt …") ---------- */
+.search-bar__icon--bang {
+  display: inline-flex;
+  color: var(--accent);
+  animation: search-bang-in 180ms ease-out;
+}
+
+.search-bar__bang {
+  flex-shrink: 0;
+  margin-left: calc(var(--space-2) * -1);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@keyframes search-bang-in {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+
+/* ---------- suggestions dropdown ---------- */
+.search-bar__suggest {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-elevated);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.search-bar__suggest-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.search-bar__suggest-item svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.search-bar__suggest-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-bar__suggest-item--active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* one-time "enable suggestions" row (host permission is asked on click) */
+.search-bar__ask {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 8px 8px 8px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.search-bar__ask > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.search-bar__ask-text {
+  flex: 1;
+}
+
+.search-bar__ask-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-bar__ask-close {
+  display: inline-flex;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.search-bar__ask-close:hover {
+  color: var(--text);
 }

@@ -2,17 +2,37 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Image as ImageIcon } from "lucide-react";
 import { registerFeature } from "@/core/feature-registry";
 import { CORE_FEATURE_ID, useFeatureValues, useSettingsStore } from "@/core/settings-engine/settingsStore";
-import { getWallpaperUrl, useWallpaperStore } from "./store";
+import { getWallpaperUrl, useWallpaperStore, wallpaperExists } from "./store";
 import { WallpaperManager } from "./WallpaperManager";
 import { wallpaperSettingsSchema } from "./settings.schema";
-import {
-  fetchRandomWallhavenWallpaper,
-  type WallhavenCategory,
-  type WallhavenResolution,
-} from "./wallhaven";
+import { fetchRandomWallhavenWallpaper, wallhavenOptionsFrom } from "./wallhaven";
 import "./wallpaper.css";
 
 export const WALLPAPER_FEATURE_ID = "wallpaper";
+/** quiet period after a Wallhaven setting changes before fetching a new image */
+const WALLHAVEN_SETTLE_MS = 1200;
+
+/**
+ * Keep only the newest `wallhavenKeep` auto-downloaded Wallhaven images.
+ * Never touches the one on screen, the chosen wallpaper or slideshow picks.
+ */
+async function pruneWallhaven(): Promise<void> {
+  const settings = useSettingsStore.getState();
+  const v = settings.values[WALLPAPER_FEATURE_ID] ?? {};
+  const keepIds = [
+    typeof v.wallhavenLastId === "string" ? v.wallhavenLastId : "",
+    typeof v.activeId === "string" ? v.activeId : "",
+    ...(Array.isArray(v.slideItems) ? (v.slideItems as string[]) : []),
+  ].filter(Boolean);
+  const store = useWallpaperStore.getState();
+  // Versions before the `auto` flag saved random picks as plain "wallhaven-*"
+  // rows. Adopt them once so they count toward the cap too.
+  if (v.wallhavenLegacyAdopted !== true) {
+    await store.adoptLegacyWallhaven(keepIds);
+    settings.setValue(WALLPAPER_FEATURE_ID, "wallhavenLegacyAdopted", true);
+  }
+  await store.pruneAuto(wallhavenOptionsFrom(v).keep, keepIds);
+}
 
 interface Layer {
   key: string;
@@ -75,10 +95,8 @@ function WallpaperLayer() {
               ? "all"
               : "wallhaven";
 
-  const wallhavenTopic = (values.wallhavenTopic as string) ?? "all";
-  const wallhavenCustomQuery = (values.wallhavenCustomQuery as string) ?? "";
-  const wallhavenCategory = (values.wallhavenCategory as WallhavenCategory) ?? "all";
-  const wallhavenResolution = (values.wallhavenResolution as WallhavenResolution) ?? "2560x1440";
+  const hydrated = useSettingsStore((s) => s.hydrated);
+  const { signature: wallhavenSig, keep: wallhavenKeep } = wallhavenOptionsFrom(values);
 
   const isLocalRandom =
     (randomModeKind === "images" || randomModeKind === "videos" || randomModeKind === "all") &&
@@ -89,7 +107,8 @@ function WallpaperLayer() {
   const loadItems = useWallpaperStore((s) => s.load);
   const [randomId, setRandomId] = useState<string | null>(null);
   const [wallhavenActiveId, setWallhavenActiveId] = useState<string | null>(null);
-  const wallhavenFetchingRef = useRef(false);
+  // signature last handled — refs survive StrictMode's remount, so this also dedupes that
+  const wallhavenSigRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isLocalRandom && !itemsLoaded) void loadItems();
@@ -107,51 +126,71 @@ function WallpaperLayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLocalRandom, randomModeKind, itemsLoaded]);
 
-  // Wallhaven random fetch on new tab open (2K+ landscape: space, forest, city, landscape)
+  // Wallhaven random-on-open. Reuses the last downloaded image until the refresh
+  // interval runs out (or the topics change) instead of downloading a new
+  // multi-MB file on every single tab.
   useEffect(() => {
-    if (slideshow || randomModeKind !== "wallhaven") return;
-    if (wallhavenFetchingRef.current) return;
-    wallhavenFetchingRef.current = true;
+    if (!hydrated || slideshow || randomModeKind !== "wallhaven") return;
+    if (wallhavenSigRef.current === wallhavenSig) return;
+    // First run on tab open: go now. Later runs come from the user editing
+    // settings (ticking topics, picking resolution…) — wait for them to settle
+    // so a burst of edits costs one download, not one per click.
+    const firstRun = wallhavenSigRef.current === null;
+    const timer = window.setTimeout(
+      () => {
+        wallhavenSigRef.current = wallhavenSig;
+        void runWallhaven();
+      },
+      firstRun ? 0 : WALLHAVEN_SETTLE_MS,
+    );
+    return () => window.clearTimeout(timer);
 
-    void (async () => {
+    async function runWallhaven() {
+      const settings = useSettingsStore.getState();
+      const current = settings.values[WALLPAPER_FEATURE_ID] ?? {};
+      const opts = wallhavenOptionsFrom(current);
+      const lastId = typeof current.wallhavenLastId === "string" ? current.wallhavenLastId : "";
+      const lastAt = typeof current.wallhavenLastAt === "number" ? current.wallhavenLastAt : 0;
+      const lastSig = current.wallhavenLastSig;
+      // (the previous pick is already on screen via `wallhavenLastId` while this runs)
+      const lastUsable = !!lastId && (await wallpaperExists(lastId));
+      const fresh =
+        lastUsable &&
+        lastSig === opts.signature &&
+        opts.refreshMs > 0 &&
+        Date.now() - lastAt < opts.refreshMs;
+      if (fresh) return;
+
       try {
-        const queryToFetch = wallhavenCustomQuery.trim() || wallhavenTopic;
-        const wp = await fetchRandomWallhavenWallpaper(
-          queryToFetch,
-          wallhavenCategory,
-          wallhavenResolution,
-        );
-        if (wp) {
-          const newId = await useWallpaperStore.getState().addFromUrl(wp.path);
-          setWallhavenActiveId(newId);
-          // Set as activeId in store as well if none is set yet (fresh install)
-          if (!values.activeId) {
-            useSettingsStore.getState().setValue(WALLPAPER_FEATURE_ID, "activeId", newId);
-          }
-          // Keep library tidy by pruning older auto-fetched Wallhaven wallpapers (> 5)
-          const allItems = useWallpaperStore.getState().items;
-          const autoItems = allItems.filter(
-            (it) => it.name.startsWith("wallhaven-") && it.id !== newId,
-          );
-          if (autoItems.length > 5) {
-            for (const old of autoItems.slice(5)) {
-              void useWallpaperStore.getState().remove(old.id);
-            }
-          }
-        }
+        const wp = await fetchRandomWallhavenWallpaper(opts);
+        if (!wp) return;
+        const store = useWallpaperStore.getState();
+        const newId = await store.addFromUrl(wp.path, { auto: true });
+        setWallhavenActiveId(newId);
+        settings.setValues(WALLPAPER_FEATURE_ID, {
+          wallhavenLastId: newId,
+          wallhavenLastAt: Date.now(),
+          wallhavenLastSig: opts.signature,
+        });
+        await pruneWallhaven();
       } catch (err) {
         console.warn("Failed to fetch random Wallhaven wallpaper:", err);
       }
-    })();
-  }, [
-    slideshow,
-    randomModeKind,
-    wallhavenTopic,
-    wallhavenCustomQuery,
-    wallhavenCategory,
-    wallhavenResolution,
-    values.activeId,
-  ]);
+    }
+  }, [hydrated, slideshow, randomModeKind, wallhavenSig]);
+
+  // Cap the auto-downloaded Wallhaven images — also when the limit is lowered,
+  // and once at tab open for images saved by older versions.
+  // Debounced: deletion is permanent, and dragging the slider past 1 on the way
+  // to 5 must not wipe images. Cancelling here only postpones — the next tab
+  // open prunes anyway.
+  useEffect(() => {
+    if (!hydrated || randomModeKind !== "wallhaven") return;
+    const timer = window.setTimeout(() => {
+      void pruneWallhaven().catch((err) => console.warn("Wallhaven prune failed:", err));
+    }, WALLHAVEN_SETTLE_MS);
+    return () => window.clearTimeout(timer);
+  }, [hydrated, randomModeKind, wallhavenKeep]);
 
   const slideActiveId =
     slideshow && slideItems.length > 0
@@ -160,7 +199,10 @@ function WallpaperLayer() {
   const activeId =
     slideActiveId ??
     (randomModeKind === "wallhaven"
-      ? (wallhavenActiveId ?? (values.activeId as string) ?? "")
+      ? (wallhavenActiveId ??
+        (values.wallhavenLastId as string | undefined) ??
+        (values.activeId as string) ??
+        "")
       : isLocalRandom && randomId
         ? randomId
         : ((values.activeId as string) ?? ""));
